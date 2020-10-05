@@ -2279,12 +2279,14 @@ void priest_t::generate_apl_shadow()
                     "Use VB on CD if you don't need to cast Devouring Plague, and there are less than 4 targets out (5 "
                     "with conduit)." );
   main->add_action( this, "Shadow Word: Death",
-                    "target_if=target.health.pct<20&!variable.searing_nightmare_cutoff|(pet.fiend.active&runeforge.shadowflame_prism.equipped)",
+                    "target_if=target.health.pct<20&!variable.searing_nightmare_cutoff|(pet.fiend.active&runeforge."
+                    "shadowflame_prism.equipped)",
                     "Use Shadow Word: Death if the target is about to die or you have Shadowflame Prism equipped with "
                     "Mindbender or Shadowfiend active." );
   main->add_talent( this, "Surrender to Madness", "target_if=target.time_to_die<25&buff.voidform.down",
                     "Use Surrender to Madness on a target that is going to die at the right time." );
-  main->add_talent( this, "Mindbender",",if=dot.vampiric_touch.ticking", "Use Mindbender if Vampiric Touch only if ticking on the target." );
+  main->add_talent( this, "Mindbender", ",if=dot.vampiric_touch.ticking",
+                    "Use Mindbender if vampiric Touch only if ticking on the target." );
   main->add_talent( this, "Void Torrent", "target_if=variable.all_dots_up&!buff.voidform.up&target.time_to_die>4",
                     "Use Void Torrent only if all DoTs are active and the target won't die during the channel." );
   main->add_action(
@@ -2324,8 +2326,8 @@ void priest_t::generate_apl_shadow()
                     "using Psychic Link and NOT Misery." );
   main->add_action(
       this, "Shadow Word: Pain",
-      "target_if=refreshable&target.time_to_die>4&!talent.misery.enabled&(!talent.psychic_link.enabled|(talent.psychic_"
-      "link.enabled&spell_targets.mind_sear<=2))",
+      "target_if=refreshable&target.time_to_die>4&!(talent.searing_nightmare.enabled&variable.searing_nightmare_cutoff)"
+      "&!talent.misery.enabled&(!talent.psychic_link.enabled|(talent.psychic_link.enabled&spell_targets.mind_sear<=2))",
       "Keep SW:P up on as many targets as possible, except when fighting 3 or more stacked mobs with Psychic Link." );
   main->add_action( this, "Mind Sear",
                     "target_if=spell_targets.mind_sear>variable.mind_sear_cutoff,chain=1,interrupt_immediate=1,"
