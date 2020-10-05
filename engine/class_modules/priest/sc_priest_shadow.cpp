@@ -2313,9 +2313,14 @@ void priest_t::generate_apl_shadow()
                     "cooldown.void_bolt.up",
                     "Use Mind Flay to consume Dark Thoughts procs on ST. TODO Confirm if this is a higher priority "
                     "than redotting unless dark thoughts is about to time out" );
-  main->add_action( this, "Mind Blast",
-                    "if=variable.dots_up&raid_event.movement.in>cast_time+0.5&spell_targets.mind_sear<4",
-                    "TODO Verify target cap" );
+  main->add_action(
+      this, "Mind Blast",
+      "if=raid_event.movement.in>cast_time+0.5&(variable.dots_up&spell_targets.mind_sear<4|pet.fiend.active&runeforge."
+      "shadowflame_prism.equipped)&!(cooldown.mindbender.up&runeforge.shadowflame_prism.equipped)",
+      "Cast mindblast with dots up if we are less than the target cap. However, if we have shadowflame prism and our "
+      "pet is active cast mindblast anyway. Do not cast mindblast if mindbender is off cooldown and we have "
+      "shadowflame."
+      "TODO Verify both base target cap and cap with shadowflame" );
   main->add_action( this, "Vampiric Touch",
                     "target_if=refreshable&target.time_to_die>6|(talent.misery.enabled&dot.shadow_word_pain."
                     "refreshable)|buff.unfurling_darkness.up" );
