@@ -2285,7 +2285,7 @@ void priest_t::generate_apl_shadow()
                     "Mindbender or Shadowfiend active." );
   main->add_talent( this, "Surrender to Madness", "target_if=target.time_to_die<25&buff.voidform.down",
                     "Use Surrender to Madness on a target that is going to die at the right time." );
-  main->add_talent( this, "Mindbender", ",if=dot.vampiric_touch.ticking",
+  main->add_talent( this, "Mindbender", "if=dot.vampiric_touch.ticking",
                     "Use Mindbender if vampiric Touch only if ticking on the target." );
   main->add_talent( this, "Void Torrent", "target_if=variable.all_dots_up&!buff.voidform.up&target.time_to_die>4",
                     "Use Void Torrent only if all DoTs are active and the target won't die during the channel." );
