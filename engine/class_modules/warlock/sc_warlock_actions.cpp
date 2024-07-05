@@ -1040,8 +1040,9 @@ using namespace helpers;
 
   struct agony_t : public warlock_spell_t
   {
-    agony_t( warlock_t* p, util::string_view options_str ) 
-      : warlock_spell_t( "Agony", p, p->warlock_base.agony, options_str )
+    bool from_vt;
+    agony_t( warlock_t* p, util::string_view options_str, bool from_taint = false ) 
+      : warlock_spell_t( "Agony", p, p->warlock_base.agony, options_str ), from_vt( from_taint )
     {
       may_crit = false;
 
@@ -1061,9 +1062,9 @@ using namespace helpers;
     {
       warlock_spell_t::execute();
 
-      if ( p()->talents.writhe_in_agony.ok() )
+      if ( p()->talents.writhe_in_agony.ok() || p()->talents.infirmity.ok() && from_vt)
       {
-        int delta = (int)( p()->talents.writhe_in_agony->effectN( 3 ).base_value() ) - td( execute_state->target )->dots_agony->current_stack();
+        int delta = (int)( p()->talents.writhe_in_agony->effectN( 3 ).base_value() + p()->talents.infirmity->effectN(1).base_value() ) - td( execute_state->target )->dots_agony->current_stack();
 
         if ( delta > 0 )
           td( execute_state->target )->dots_agony->increment( delta );
@@ -1333,7 +1334,7 @@ using namespace helpers;
         : warlock_spell_t( "Vile Taint (DoT)", p, p->talents.vile_taint_dot )
       {
         tick_zero = background = true;
-        execute_action = new agony_t( p, "" );
+        execute_action = new agony_t( p, "", true);
         execute_action->background = true;
         execute_action->dual = true;
         execute_action->base_costs[ RESOURCE_MANA ] = 0.0;
@@ -1342,9 +1343,6 @@ using namespace helpers;
       void last_tick( dot_t* d ) override
       {
         warlock_spell_t::last_tick( d );
-
-        if ( p()->sets->has_set_bonus( WARLOCK_AFFLICTION, T30, B4 ) )
-          td( d->target )->debuffs_infirmity->expire();
       }
     };
     
@@ -1358,9 +1356,6 @@ using namespace helpers;
     void impact( action_state_t* s ) override
     {
       warlock_spell_t::impact( s );
-
-      if ( p()->sets->has_set_bonus( WARLOCK_AFFLICTION, T30, B4 ) )
-        td( s->target )->debuffs_infirmity->trigger();
     }
   };
 
@@ -1398,7 +1393,7 @@ using namespace helpers;
     {
       warlock_spell_t::impact( s );
 
-      if ( p()->sets->has_set_bonus( WARLOCK_AFFLICTION, T30, B4 ) )
+      if ( p()->talents.infirmity.enabled() )
         td( s->target )->debuffs_infirmity->trigger();
     }
 
@@ -1406,7 +1401,7 @@ using namespace helpers;
     {
       warlock_spell_t::last_tick( d );
 
-      if ( p()->sets->has_set_bonus( WARLOCK_AFFLICTION, T30, B4 ) )
+      if ( p()->talents.infirmity.enabled() )
         td( d->target )->debuffs_infirmity->expire();
     }
   };
