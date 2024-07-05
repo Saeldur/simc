@@ -211,13 +211,13 @@ warlock_t::warlock_t( sim_t* sim, util::string_view name, race_e r )
 
 void warlock_t::invalidate_cache( cache_e c )
 {
-  player_t::invalidate_cache( c );
+  parse_player_effects_t::invalidate_cache( c );
 
   switch ( c )
   {
     case CACHE_MASTERY:
       if ( warlock_base.master_demonologist->ok() )
-        player_t::invalidate_cache( CACHE_PLAYER_DAMAGE_MULTIPLIER );
+        parse_player_effects_t::invalidate_cache( CACHE_PLAYER_DAMAGE_MULTIPLIER );
       break;
     default:
       break;
@@ -226,7 +226,7 @@ void warlock_t::invalidate_cache( cache_e c )
 
 double warlock_t::composite_player_target_multiplier( player_t* target, school_e school ) const
 {
-  double m = player_t::composite_player_target_multiplier( target, school );
+  double m = parse_player_effects_t::composite_player_target_multiplier( target, school );
 
   const warlock_td_t* td = get_target_data( target );
 
@@ -262,7 +262,7 @@ double warlock_t::composite_player_target_multiplier( player_t* target, school_e
 
 double warlock_t::composite_player_multiplier( school_e school ) const
 {
-  double m = player_t::composite_player_multiplier( school );
+  double m = parse_player_effects_t::composite_player_multiplier( school );
 
   if ( specialization() == WARLOCK_DESTRUCTION )
   {
@@ -274,7 +274,7 @@ double warlock_t::composite_player_multiplier( school_e school ) const
 
 double warlock_t::composite_player_pet_damage_multiplier( const action_state_t* s, bool guardian ) const
 {
-  double m = player_t::composite_player_pet_damage_multiplier( s, guardian );
+  double m = parse_player_effects_t::composite_player_pet_damage_multiplier( s, guardian );
 
   if ( specialization() == WARLOCK_DESTRUCTION )
   {
@@ -301,7 +301,7 @@ double warlock_t::composite_player_pet_damage_multiplier( const action_state_t* 
 
 double warlock_t::composite_player_target_pet_damage_multiplier( player_t* target, bool guardian ) const
 {
-  double m = player_t::composite_player_target_pet_damage_multiplier( target, guardian );
+  double m = parse_player_effects_t::composite_player_target_pet_damage_multiplier( target, guardian );
 
   const warlock_td_t* td = get_target_data( target );
 
@@ -338,7 +338,7 @@ double warlock_t::composite_player_target_pet_damage_multiplier( player_t* targe
 
 double warlock_t::composite_spell_crit_chance() const
 {
-  double m = player_t::composite_spell_crit_chance();
+  double m = parse_player_effects_t::composite_spell_crit_chance();
 
   if ( specialization() == WARLOCK_DESTRUCTION && talents.backlash.ok() )
     m += talents.backlash->effectN( 1 ).percent();
@@ -348,7 +348,7 @@ double warlock_t::composite_spell_crit_chance() const
 
 double warlock_t::composite_melee_crit_chance() const
 {
-  double m = player_t::composite_melee_crit_chance();
+  double m = parse_player_effects_t::composite_melee_crit_chance();
 
   if ( specialization() == WARLOCK_DESTRUCTION && talents.backlash.ok() )
     m += talents.backlash->effectN( 1 ).percent();
@@ -879,6 +879,8 @@ void warlock_t::apply_affecting_auras( action_t& action )
   action.apply_affecting_aura( talents.xavius_gambit );
   action.apply_affecting_aura( talents.perpetual_unstability );
   action.apply_affecting_aura( talents.improved_malefic_rapture );
+
+  action.apply_affecting_aura( sets->set( WARLOCK_AFFLICTION, TWW1, B2 ) );
 }
 
 

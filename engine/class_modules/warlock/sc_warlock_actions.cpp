@@ -1122,12 +1122,8 @@ using namespace helpers;
 
         if ( d >= 0 && d < as<int>( p()->procs.malefic_rapture.size() ) )
           p()->procs.malefic_rapture[ d ]->occur();
-
+        
         warlock_spell_t::execute();
-        if ( p()->hero.blackened_soul.enabled() )
-        {
-          p()->increment_wither( 1, true );
-        }
       }
     };
 
@@ -1198,6 +1194,11 @@ using namespace helpers;
       warlock_spell_t::execute();
 
       p()->buffs.tormented_crescendo->decrement();
+
+      if ( p()->hero.blackened_soul.enabled() )
+      {
+        p()->increment_wither( 1, true );
+      }
     }
 
     size_t available_targets( std::vector<player_t*>& tl )
@@ -1743,6 +1744,36 @@ using namespace helpers;
         m *= 1.0 + p()->talents.soul_rot->effectN( 4 ).base_value() / 10.0; // Primary target takes increased damage
 
       return m;
+    }
+  };
+
+  struct oblivion_t : public warlock_spell_t
+  {
+    oblivion_t( warlock_t* p, util::string_view options_str )
+      : warlock_spell_t( "Oblivion", p, p->talents.oblivion, options_str )
+    {
+    }
+
+    double composite_ta_multiplier( const action_state_t* s ) const override
+    {
+      double m = warlock_spell_t::composite_ta_multiplier( s );
+
+      if ( p()->talents.withering_bolt.ok() )
+        m *= 1.0 +
+             data().effectN( 2 ).percent() * std::min( (int)( data().effectN( 3 ).base_value() ),
+                                                       p()->get_target_data( s->target )->count_affliction_dots() );
+
+      return m;
+    }
+
+    void execute() override
+    {
+      warlock_spell_t::execute();
+
+      if ( p()->hero.blackened_soul.enabled() )
+      {
+        p()->increment_wither( 1, true );
+      }
     }
   };
 
@@ -3675,6 +3706,8 @@ using namespace helpers;
       return new vile_taint_t( this, options_str );
     if ( action_name == "malefic_rapture" )
       return new malefic_rapture_t( this, options_str );
+    if ( action_name == "oblivion" )
+      return new oblivion_t( this, options_str );
     if ( action_name == "soul_rot" )
       return new soul_rot_t( this, options_str );
     if ( action_name == "seed_of_corruption" )
