@@ -1,6 +1,7 @@
 #pragma once
 #include "simulationcraft.hpp"
 
+#include "action/parse_effects.hpp"
 #include "player/pet_spawner.hpp"
 #include "sc_warlock_pets.hpp"
 #include "class_modules/apl/warlock.hpp"
@@ -46,6 +47,7 @@ struct warlock_td_t : public actor_target_data_t
   propagate_const<dot_t*> dots_vile_taint;
   propagate_const<dot_t*> dots_drain_life_aoe; // Soul Rot effect
   propagate_const<dot_t*> dots_soul_rot;
+  propagate_const<dot_t*> dots_wither;
 
   propagate_const<buff_t*> debuffs_haunt;
   propagate_const<buff_t*> debuffs_shadow_embrace;
@@ -77,7 +79,7 @@ struct warlock_td_t : public actor_target_data_t
   int count_affliction_dots() const;
 };
 
-struct warlock_t : public player_t
+struct warlock_t : public parse_player_effects_t
 {
 public:
   player_t* havoc_target;
@@ -104,6 +106,7 @@ public:
     const spell_data_t* agony_2; // Rank 2 still a separate spell (learned automatically). Grants increased max stacks TODO: Check if needed in TWW
     const spell_data_t* xavian_teachings; // Passive granted only to Affliction. Instant cast data in this spell, points to base Corruption spell (172) for the direct damage
     const spell_data_t* malefic_rapture; // TODO: Move from talent section
+    const spell_data_t* malefic_rapture_dmg;  // TODO: Move from talent section
     const spell_data_t* potent_afflictions; // Affliction Mastery - Increased DoT and Malefic Rapture damage
     const spell_data_t* affliction_warlock; // Spec aura
 
@@ -157,6 +160,7 @@ public:
     player_talent_t wrathful_minion; // Primary pet damage increase
     player_talent_t socrethars_guile;
     player_talent_t sargerei_technique;
+    player_talent_t demonic_tactics;
     player_talent_t soul_conduit;
     player_talent_t soulburn;
     const spell_data_t* soulburn_buff; // This buff is applied after using Soulburn and prevents another usage unless cleared
@@ -169,8 +173,6 @@ public:
     const spell_data_t* grimoire_of_sacrifice_proc; // Damage data is here, but RPPM of proc trigger is in buff data
 
     // Affliction
-    player_talent_t malefic_rapture; // TODO: Move to base section
-    const spell_data_t* malefic_rapture_dmg; // Damage events use this ID, but primary talent contains the spcoeff
     player_talent_t unstable_affliction; // TODO: Check if higher ranks are still separate spell data
     const spell_data_t* unstable_affliction_2; // Soul Shard on demise, still seems to be separate spell (learned automatically)
     const spell_data_t* unstable_affliction_3; // +5 seconds to duration, still seems to be separate spell (learned automatically)
@@ -187,6 +189,7 @@ public:
     player_talent_t nightfall;
     const spell_data_t* nightfall_buff;
     player_talent_t volatile_agony; // TODO: New
+    const spell_data_t* volatile_agony_dmg;  // TODO: New 453035
 
     player_talent_t improved_shadow_bolt; // TODO: New
     player_talent_t drain_soul; // This represents the talent node but not much else
@@ -201,10 +204,12 @@ public:
     player_talent_t haunt; // TODO: Shadow Embrace is applied by other talent
     player_talent_t shadow_embrace; // TODO: Stack count is 2
     const spell_data_t* shadow_embrace_debuff; // Default values set from talent data, but contains debuff info
+    const spell_data_t* shadow_embrace_debuff_shadowbolt;  // Default values set from talent data, but contains debuff info
     player_talent_t sacrolashs_dark_strike; // Increased Corruption ticking damage, and ticks extend Curses (not implemented)
     player_talent_t summon_darkglare;
     player_talent_t cunning_cruelty; // TODO: New
     player_talent_t infirmity; // TODO: Move from tier sets
+    const spell_data_t* infirmity_debuff; // 458219
 
     player_talent_t improved_haunt; // TODO: New
     player_talent_t malediction; // TODO: New
@@ -220,7 +225,9 @@ public:
     player_talent_t xavius_gambit; // Unstable Affliction Damage Multiplier
     player_talent_t focused_malignancy; // Increaed Malefic Rapture damage to target with Unstable Affliction
     player_talent_t perpetual_unstability; // TODO: New
-    player_talent_t malign_omen; // TODO: New
+    const spell_data_t* perpetual_unstability_dmg;  // TODO: New 459461
+    player_talent_t malign_omen; // TODO: New 
+    const spell_data_t* malign_omen_buff;  // TODO: New 458043
     player_talent_t relinquished; // TODO: New
     player_talent_t withering_bolt; // Increased damage on Shadow Bolt/Drain Soul based on active DoT count on target
     player_talent_t improved_malefic_rapture; // TODO: New
@@ -231,6 +238,7 @@ public:
     const spell_data_t* dark_harvest_buff;
     player_talent_t ravenous_afflictions; // TODO: New
     player_talent_t malefic_touch; // TODO: New
+    const spell_data_t* malefic_touch_dmg;  // TODO: New 458131
 
     // Demonology
     player_talent_t demoniac; // TODO: Move from base section
@@ -427,6 +435,8 @@ public:
 
     player_talent_t xalans_ferocity;
     player_talent_t blackened_soul;
+    const spell_data_t* blackened_soul_dmg;
+    const spell_data_t* blackened_soul_ticker;
     player_talent_t xalans_cruelty;
 
     player_talent_t hatefury_rituals;
@@ -653,6 +663,7 @@ public:
   }
 
   action_t* create_action_warlock( util::string_view, util::string_view );
+  void parse_player_effects();
 
   action_t* create_action_affliction( util::string_view, util::string_view );
   void create_buffs_affliction();

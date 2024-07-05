@@ -27,14 +27,17 @@ warlock_td_t::warlock_td_t( player_t* target, warlock_t& p )
   dots_unstable_affliction = target->get_dot( "unstable_affliction", &p );
   dots_vile_taint = target->get_dot( "vile_taint_dot", &p );
   dots_soul_rot = target->get_dot( "soul_rot", &p );
+  dots_wither = target->get_dot( "wither", &p );
 
   debuffs_haunt = make_buff( *this, "haunt", p.talents.haunt )
                       ->set_refresh_behavior( buff_refresh_behavior::PANDEMIC )
                       ->set_default_value_from_effect( 2 )
                       ->set_cooldown( 0_ms );
 
-  debuffs_shadow_embrace = make_buff( *this, "shadow_embrace", p.talents.shadow_embrace_debuff )
-                               ->set_default_value( p.talents.shadow_embrace->effectN( 1 ).percent() );
+  debuffs_shadow_embrace = make_buff( *this, "shadow_embrace",
+                                      p.talents.drain_soul.enabled() ? p.talents.shadow_embrace_debuff
+                                                                     : p.talents.shadow_embrace_debuff_shadowbolt )
+                               ->set_default_value_from_effect( 1 );
 
   debuffs_infirmity = make_buff( *this, "infirmity", p.tier.infirmity )
                           ->set_default_value( p.tier.infirmity->effectN( 1 ).percent() )
@@ -150,12 +153,15 @@ int warlock_td_t::count_affliction_dots() const
   if ( dots_soul_rot->is_ticking() )
     count++;
 
+  if ( dots_wither->is_ticking() )
+    count++;
+
   return count;
 }
 
 
 warlock_t::warlock_t( sim_t* sim, util::string_view name, race_e r )
-  : player_t( sim, WARLOCK, name, r ),
+  : parse_player_effects_t( sim, WARLOCK, name, r ),
     havoc_target( nullptr ),
     ua_target( nullptr ),
     havoc_spells(),
@@ -755,7 +761,116 @@ void warlock_t::apply_affecting_auras( action_t& action )
   action.apply_affecting_aura( talents.dark_virtuosity );
   action.apply_affecting_aura( talents.kindled_malice );
   action.apply_affecting_aura( talents.xavius_gambit );
+  action.apply_affecting_aura( talents.sacrolashs_dark_strike );
+
+  
+  action.apply_affecting_aura( hero.xalans_ferocity );
+  action.apply_affecting_aura( hero.xalans_cruelty );
+  action.apply_affecting_aura( hero.hatefury_rituals );
+  action.apply_affecting_aura( hero.bleakheart_tactics );
+  action.apply_affecting_aura( hero.mark_of_xavius );
+  action.apply_affecting_aura( hero.seeds_of_their_demise );
+  action.apply_affecting_aura( hero.mark_of_perotharn );
+
+  action.apply_affecting_aura( talents.siphon_life );
+  action.apply_affecting_aura( talents.kindled_malice );
+  action.apply_affecting_aura( talents.improved_shadow_bolt );
+  action.apply_affecting_aura( talents.summoners_embrace );
+  action.apply_affecting_aura( talents.improved_haunt );
+  action.apply_affecting_aura( talents.malediction );
+  action.apply_affecting_aura( talents.contagion );
+  action.apply_affecting_aura( talents.xavius_gambit );
+  action.apply_affecting_aura( talents.perpetual_unstability );
+  action.apply_affecting_aura( talents.improved_malefic_rapture );
 }
+
+
+// monk_t::monk_report =================================================
+
+/* Report Extension Class
+ * Here you can define class specific report extensions/overrides
+ */
+class warlock_report_t : public player_report_extension_t
+{
+public:
+  warlock_report_t( warlock_t& player ) : p( player )
+  {
+  }
+
+  struct monk_bug
+  {
+    std::string desc;
+    std::string date;
+    bool match;
+  };
+
+  auto_dispose<std::vector<monk_bug*>> issues;
+
+  void warlock_bugreport( report::sc_html_stream& os )
+  {
+    // Description: Self-explanatory
+    // Date: Self-explanatory
+    // Match: True if sim matches in-game behavior
+    auto ReportIssue = [ this ]( std::string desc, std::string date, bool match = false ) {
+      monk_bug* new_issue = new monk_bug;
+      new_issue->desc     = desc;
+      new_issue->date     = date;
+      new_issue->match    = match;
+      issues.push_back( new_issue );
+    };
+
+    // Add bugs / issues with sims here:
+    /*ReportIssue( "The spells that contribute to ETL change based on which buff(s) are up", "2023-08-01", true );
+    ReportIssue( "The ETL cache for both tigers resets to 0 when either spawn", "2023-08-03", true );
+    ReportIssue( "The spells that FoX contributes to ETL change after the first tick of damage", "2023-08-01", true );
+    ReportIssue( "Jade Ignition is reduced by SEF but not copied", "2023-02-22", true );
+    ReportIssue( "Blackout Combo buffs both the initial and periodic effect of Breath of Fire", "2023-03-08", true );*/
+
+    // =================================================
+
+    os << "<div class=\"player-section\">\n";
+    os << "<h2 class=\"toggle\">Known Bugs and Issues</h2>\n";
+    os << "<div class=\"toggle-content hide\">\n";
+
+    for ( auto issue : issues )
+    {
+      if ( issue->desc.empty() )
+        continue;
+
+      os << "<h3>" << issue->desc << "</h3>\n";
+
+      os << "<table class=\"sc even\">\n"
+         << "<thead>\n"
+         << "<tr>\n"
+         << "<th class=\"left\">Effective Date</th>\n"
+         << "<th class=\"left\">Sim Matches Game Behavior</th>\n"
+         << "</tr>\n"
+         << "</thead>\n";
+
+      os << "<tr>\n"
+         << "<td class=\"left\"><strong>" << issue->date << "</strong></td>\n"
+         << "<td class=\"left\" colspan=\"5\"><strong>" << ( issue->match ? "YES" : "NO" ) << "</strong></td>\n"
+         << "</tr>\n";
+
+      os << "</table>\n";
+    }
+
+    os << "</table>\n";
+    os << "</div>\n";
+    os << "</div>\n";
+  }
+
+  void html_customsection( report::sc_html_stream& os ) override
+  {
+    warlock_bugreport( os );
+    os << "<div class=\"player-section\">\n";
+    p.parsed_effects_html( os );
+    os << "</div>\n";
+  }
+
+private:
+  warlock_t& p;
+};
 
 struct warlock_module_t : public module_t
 {
@@ -763,7 +878,11 @@ struct warlock_module_t : public module_t
   { }
 
   player_t* create_player( sim_t* sim, util::string_view name, race_e r = RACE_NONE ) const override
-  { return new warlock_t( sim, name, r ); }
+  {
+    auto p = new warlock_t( sim, name, r );
+    p->report_extension = std::make_unique<warlock_report_t>( *p );
+    return p;
+  }
 
   void register_hotfixes() const override
   { }

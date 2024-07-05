@@ -516,8 +516,8 @@ using namespace helpers;
         if ( p->talents.absolute_corruption.ok() )
         {
           dot_duration = sim->expected_iteration_time > 0_ms
-            ? 2 * sim->expected_iteration_time
-            : 2 * sim->max_time * ( 1.0 + sim->vary_combat_length ); // "Infinite" duration
+            ? 4 * sim->expected_iteration_time
+            : 4 * sim->max_time * ( 1.0 + sim->vary_combat_length ); // "Infinite" duration
           base_td_multiplier *= 1.0 + p->talents.absolute_corruption->effectN( 2 ).percent(); // 2022-09-25: Only tick damage is affected
         }
 
@@ -558,9 +558,6 @@ using namespace helpers;
       {
         double m = warlock_spell_t::composite_ta_multiplier( s );
 
-        if ( p()->talents.sacrolashs_dark_strike.ok() )
-          m *= 1.0 + p()->talents.sacrolashs_dark_strike->effectN( 1 ).percent();
-
         return m;
       }
     };
@@ -585,12 +582,137 @@ using namespace helpers;
 
     dot_t* get_dot( player_t* t ) override
     { return periodic->get_dot( t ); }
+
+    bool ready() override
+    {
+      if ( p()->hero.wither.enabled() && p()->specialization() == WARLOCK_AFFLICTION )
+        return false;
+
+      return warlock_spell_t::ready();
+    }
+  };
+
+  struct blackened_soul_t : public warlock_spell_t
+  {
+    blackened_soul_t( warlock_t* p ) : warlock_spell_t( "Blackened Soul", p, p->hero.blackened_soul_dmg )
+    {
+      background = true;
+    }
+
+    double composite_da_multiplier( const action_state_t* s ) const override
+    {
+      double m = warlock_spell_t::composite_da_multiplier( s );
+
+      m *= 1 + td( s->target )->dots_wither->current_stack() * p()->hero.mark_of_xavius->effectN( 3 ).percent();
+      return m;
+    }
+
+    void execute() override
+    {
+      warlock_spell_t::execute();
+
+      if ( p()->hero.seeds_of_their_demise.enabled() && rng().roll( 0.1 ) )
+      {
+        if ( p()->specialization() == WARLOCK_AFFLICTION )
+        {
+          p()->buffs.tormented_crescendo->trigger();
+        }
+      }
+    }
+  };
+
+  struct wither_t : public warlock_spell_t
+  {
+    struct wither_dot_t : public warlock_spell_t
+    {
+      wither_dot_t( warlock_t* p ) : warlock_spell_t( "Wither", p, p->find_spell( 445474) )
+      {
+        tick_zero  = false;
+        background = dual = true;
+
+        if ( p->talents.absolute_corruption.ok() )
+        {
+          dot_duration = sim->expected_iteration_time > 0_ms
+                             ? 4 * sim->expected_iteration_time
+                             : 4 * sim->max_time * ( 1.0 + sim->vary_combat_length );  // "Infinite" duration
+          base_td_multiplier *=
+              1.0 + p->talents.absolute_corruption->effectN( 2 ).percent();  // 2022-09-25: Only tick damage is affected
+        }
+
+        triggers.shadow_invocation_tick = true;
+      }
+
+      void tick( dot_t* d ) override
+      {
+        warlock_spell_t::tick( d );
+
+        if ( result_is_hit( d->state->result ) )
+        {
+          if ( p()->talents.nightfall.ok() )
+          {
+            // Blizzard did not publicly release how nightfall was changed.
+            // We determined this is the probable functionality copied from Agony by first confirming the
+            // DR formula was the same and then confirming that you can get procs on 1st tick.
+            // The procs also have a regularity that suggest it does not use a proc chance or rppm.
+            // Last checked 09-28-2020.
+            double increment_max = 0.13;
+
+            double active_corruptions = p()->get_active_dots( d );
+            increment_max *= std::pow( active_corruptions, -2.0 / 3.0 );
+
+            p()->corruption_accumulator += rng().range( 0.0, increment_max );
+
+            if ( p()->corruption_accumulator >= 1 )
+            {
+              p()->procs.nightfall->occur();
+              p()->buffs.nightfall->trigger();
+              p()->corruption_accumulator -= 1.0;
+            }
+          }
+        }
+      }
+
+      double composite_ta_multiplier( const action_state_t* s ) const override
+      {
+        double m = warlock_spell_t::composite_ta_multiplier( s );
+
+        return m;
+      }
+    };
+
+    wither_dot_t* periodic;
+
+    wither_t( warlock_t* p, util::string_view options_str, bool seed_action )
+      : warlock_spell_t( "Wither (Direct)", p, p->find_spell( 445468 ), options_str )
+    {
+      periodic      = new wither_dot_t( p );
+      impact_action = periodic;
+      add_child( periodic );
+
+      if ( seed_action  )
+      {
+        spell_power_mod.direct = 0;
+      }
+    }
+
+    dot_t* get_dot( player_t* t ) override
+    {
+      return periodic->get_dot( t );
+    }
+
+    bool ready() override
+    {
+      if ( !p()->hero.wither.enabled() )
+        return false;
+
+      return warlock_spell_t::ready();
+    }
   };
 
   struct shadow_bolt_t : public warlock_spell_t
   {
     shadow_bolt_t( warlock_t* p, util::string_view options_str )
-      : warlock_spell_t( "Shadow Bolt", p, p->talents.drain_soul_dot->ok() ? spell_data_t::not_found() : p->warlock_base.shadow_bolt, options_str )
+      : warlock_spell_t( "Shadow Bolt", p, p->talents.drain_soul->ok() ? spell_data_t::not_found() : p->warlock_base.shadow_bolt, options_str )
     {
       triggers.shadow_invocation_direct = true;
 
@@ -806,10 +928,10 @@ using namespace helpers;
     struct malefic_rapture_damage_t : public warlock_spell_t
     {
       malefic_rapture_damage_t( warlock_t* p )
-        : warlock_spell_t ( "Malefic Rapture (hit)", p, p->talents.malefic_rapture_dmg )
+        : warlock_spell_t( "Malefic Rapture (hit)", p, p->warlock_base.malefic_rapture_dmg )
       {
         background = dual = true;
-        spell_power_mod.direct = p->talents.malefic_rapture->effectN( 1 ).sp_coeff();
+        spell_power_mod.direct = p->warlock_base.malefic_rapture->effectN( 1 ).sp_coeff();
         callbacks = false; // Individual hits have been observed to not proc trinkets like Psyche Shredder
       }
 
@@ -838,7 +960,7 @@ using namespace helpers;
     };
 
     malefic_rapture_t( warlock_t* p, util::string_view options_str )
-      : warlock_spell_t( "Malefic Rapture", p, p->talents.malefic_rapture, options_str )
+      : warlock_spell_t( "Malefic Rapture", p, p->warlock_base.malefic_rapture, options_str )
     {
       aoe = -1;
 
@@ -982,14 +1104,23 @@ using namespace helpers;
   {
     struct seed_of_corruption_aoe_t : public warlock_spell_t
     {
-      corruption_t* corr;
+      action_t* corr;
 
       seed_of_corruption_aoe_t( warlock_t* p )
         : warlock_spell_t( "Seed of Corruption (AoE)", p, p->talents.seed_of_corruption_aoe ),
-        corr( new corruption_t( p, "", true ) )
+          corr( nullptr )
       {
         aoe = -1;
         background = dual = true;
+
+        if ( p->hero.wither.enabled() )
+        {
+          corr = new wither_t( p, "", true );
+        }
+        else
+        {
+          corr = new corruption_t( p, "", true );
+        }
 
         corr->background = true;
         corr->dual = true;
@@ -1122,7 +1253,7 @@ using namespace helpers;
     };
 
     drain_soul_t( warlock_t* p, util::string_view options_str )
-      : warlock_spell_t( "Drain Soul", p, p->talents.drain_soul_dot->ok() ? p->talents.drain_soul_dot : spell_data_t::not_found(), options_str )
+      : warlock_spell_t( "Drain Soul", p, p->talents.drain_soul->ok() ? p->talents.drain_soul_dot : spell_data_t::not_found(), options_str )
     { channeled = true; }
 
     action_state_t* new_state() override
@@ -3172,7 +3303,7 @@ using namespace helpers;
         continue;
 
       agony = agony || td->dots_agony->is_ticking();
-      corruption = corruption || td->dots_corruption->is_ticking();
+      corruption = corruption || td->dots_corruption->is_ticking() || td->dots_wither->is_ticking();
 
       if ( agony && corruption )
         break;
@@ -3278,6 +3409,8 @@ using namespace helpers;
       return new interrupt_t( action_name, this, options_str );
     if ( action_name == "soulburn" )
       return new soulburn_t( this, options_str );
+    if ( action_name == "wither" && specialization() != WARLOCK_DESTRUCTION )
+      return new wither_t( this, options_str, false );
 
     return nullptr;
   }

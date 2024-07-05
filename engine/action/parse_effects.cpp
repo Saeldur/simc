@@ -995,6 +995,11 @@ std::vector<player_effect_t>* parse_player_effects_t::get_effect_vector( const s
       invalidate( CACHE_CRIT_CHANCE );
       return &crit_chance_effects;
 
+    case A_MOD_SPELL_CRIT_CHANCE:
+      str = "spell crit chance";
+      invalidate( CACHE_CRIT_CHANCE );
+      return &crit_chance_effects;
+
     case A_MOD_DAMAGE_PERCENT_DONE:
       data.opt_enum = eff.misc_value1();
       str = data.opt_enum == 0x7f ? "all" : util::school_type_string( dbc::get_school_type( data.opt_enum ) );

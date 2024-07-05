@@ -26,6 +26,9 @@ namespace warlock
     warlock_base.agony = find_class_spell( "Agony" ); // Should be ID 980
     warlock_base.agony_2 = find_spell( 231792 ); // Rank 2, +4 to max stacks
     warlock_base.xavian_teachings = find_specialization_spell( "Xavian Teachings", WARLOCK_AFFLICTION ); // Instant cast corruption and direct damage. Direct damage is in the base corruption spell on effect 3. Should be ID 317031.
+    warlock_base.malefic_rapture = find_specialization_spell( "Malefic Rapture", WARLOCK_AFFLICTION );      // Should be ID 324536
+    warlock_base.malefic_rapture_dmg =
+        find_spell( 324540 );  // This spell is the ID seen in logs, but the spcoeff is in the primary talent spell
     warlock_base.potent_afflictions = find_mastery_spell( WARLOCK_AFFLICTION ); // Should be ID 77215
     warlock_base.affliction_warlock = find_specialization_spell( "Affliction Warlock", WARLOCK_AFFLICTION ); // Should be ID 137043
 
@@ -52,8 +55,6 @@ namespace warlock
     warlock_t::init_spells_destruction();
 
     // Talents
-    talents.seed_of_corruption = find_talent_spell( talent_tree::SPECIALIZATION, "Seed of Corruption" ); // Should be ID 27243
-    talents.seed_of_corruption_aoe = find_spell( 27285 ); // Explosion damage
 
     talents.grimoire_of_sacrifice = find_talent_spell( talent_tree::SPECIALIZATION, "Grimoire of Sacrifice" ); // Aff/Destro only. Should be ID 108503
     talents.grimoire_of_sacrifice_buff = find_spell( 196099 ); // Buff data and RPPM
@@ -68,71 +69,127 @@ namespace warlock
 
     talents.socrethars_guile   = find_talent_spell( talent_tree::CLASS, "Socrethar's Guile" ); // Should be ID 405936 //405955
     talents.sargerei_technique = find_talent_spell( talent_tree::CLASS, "Sargerei Technique" );  // Should be ID 405955
+    
+    talents.demonic_tactics = find_talent_spell( talent_tree::CLASS, "Demonic Tactics" );  // Should be ID 452894
 
     talents.soul_conduit = find_talent_spell( talent_tree::CLASS, "Soul Conduit" ); // Should be ID 215941
 
     talents.soulburn = find_talent_spell( talent_tree::CLASS, "Soulburn" ); // Should be ID 385899
     talents.soulburn_buff = find_spell( 387626 );
+
+    hero.wither                = find_talent_spell( talent_tree::HERO, "Wither" );
+    hero.xalans_ferocity       = find_talent_spell( talent_tree::HERO, "Xalan's Ferocity" );
+    hero.blackened_soul        = find_talent_spell( talent_tree::HERO, "Blackened Soul" );
+    hero.blackened_soul_dmg    = find_spell( 445736 );
+    hero.blackened_soul_ticker = find_spell( 445731 );
+    hero.xalans_cruelty        = find_talent_spell( talent_tree::HERO, "Xalan's Cruelty" );
+    hero.hatefury_rituals      = find_talent_spell( talent_tree::HERO, "Hatefury Rituals" );
+    hero.bleakheart_tactics    = find_talent_spell( talent_tree::HERO, "Bleakheart Tactics" );
+    hero.mark_of_xavius        = find_talent_spell( talent_tree::HERO, "Mark of Xavius" );
+    hero.seeds_of_their_demise = find_talent_spell( talent_tree::HERO, "Seeds of Their Demise" );
+    hero.mark_of_perotharn     = find_talent_spell( talent_tree::HERO, "Mark of Peroth'arn" );
+    hero.malevolence           = find_talent_spell( talent_tree::HERO, "Malevolence" );
   }
 
   void warlock_t::init_spells_affliction()
   {
     // Talents
-    talents.malefic_rapture = find_talent_spell( talent_tree::SPECIALIZATION, "Malefic Rapture" ); // Should be ID 324536
-    talents.malefic_rapture_dmg = find_spell( 324540 ); // This spell is the ID seen in logs, but the spcoeff is in the primary talent spell
 
     talents.unstable_affliction = find_talent_spell( talent_tree::SPECIALIZATION, "Unstable Affliction" ); // Should be ID 316099
     talents.unstable_affliction_2 = find_spell( 231791 ); // Soul Shard on demise
     talents.unstable_affliction_3 = find_spell( 334315 ); // +5 seconds duration
+    
+    talents.writhe_in_agony = find_talent_spell( talent_tree::SPECIALIZATION, "Writhe in Agony" ); // Should be ID 196102
+        
+    talents.seed_of_corruption = find_talent_spell( talent_tree::SPECIALIZATION, "Seed of Corruption" ); // Should be ID 27243
+    talents.seed_of_corruption_aoe = find_spell( 27285 ); // Explosion damage
   
+    talents.dark_virtuosity = find_talent_spell( talent_tree::SPECIALIZATION, "Dark Virtuosity" ); // Should be ID 405327
+
+    talents.absolute_corruption = find_talent_spell( talent_tree::SPECIALIZATION, "Absolute Corruption" ); // Should be ID 196103
+    talents.siphon_life = find_talent_spell( talent_tree::SPECIALIZATION, "Siphon Life" ); // Should be ID 63106
+    
+    talents.kindled_malice = find_talent_spell( talent_tree::SPECIALIZATION, "Kindled Malice" );  // Should be ID 405330
+
     talents.nightfall = find_talent_spell( talent_tree::SPECIALIZATION, "Nightfall" ); // Should be ID 108558
     talents.nightfall_buff = find_spell( 264571 );
 
-    talents.writhe_in_agony = find_talent_spell( talent_tree::SPECIALIZATION, "Writhe in Agony" ); // Should be ID 196102
+    talents.volatile_agony = find_talent_spell( talent_tree::SPECIALIZATION, "Volatile Agony" );
+    talents.volatile_agony_dmg = find_spell( 453035 );
 
-    talents.shadow_embrace = find_talent_spell( talent_tree::SPECIALIZATION, "Shadow Embrace" ); // Should be ID 32388
-    talents.shadow_embrace_debuff = find_spell( 32390 );
-
-    talents.dark_virtuosity = find_talent_spell( talent_tree::SPECIALIZATION, "Dark Virtuosity" ); // Should be ID 405327
-
-    talents.kindled_malice = find_talent_spell( talent_tree::SPECIALIZATION, "Kindled Malice" );  // Should be ID 405330
-
+    
     talents.drain_soul = find_talent_spell( talent_tree::SPECIALIZATION, "Drain Soul" ); // Should be ID 388667
     talents.drain_soul_dot = find_spell( 198590 ); // This contains all the channel data
+    talents.improved_shadow_bolt = find_talent_spell( talent_tree::SPECIALIZATION, "Improved Shadow Bolt" );  // Should be ID 63106
 
-    talents.absolute_corruption = find_talent_spell( talent_tree::SPECIALIZATION, "Absolute Corruption" ); // Should be ID 196103
-
-    talents.siphon_life = find_talent_spell( talent_tree::SPECIALIZATION, "Siphon Life" ); // Should be ID 63106
-
+    talents.summoners_embrace = find_talent_spell( talent_tree::SPECIALIZATION, "Summoner's Embrace" );
+    // Gosac
+    
+    talents.vile_taint = find_talent_spell( talent_tree::SPECIALIZATION, "Vile Taint" ); // Should be ID 278350
+    talents.vile_taint_dot = find_spell( 386931 ); // DoT info here
     talents.phantom_singularity = find_talent_spell( talent_tree::SPECIALIZATION, "Phantom Singularity" ); // Should be ID 205179
     talents.phantom_singularity_tick = find_spell( 205246 ); // AoE damage info
 
-    talents.vile_taint = find_talent_spell( talent_tree::SPECIALIZATION, "Vile Taint" ); // Should be ID 278350
-    talents.vile_taint_dot = find_spell( 386931 ); // DoT info here
+    talents.haunt          = find_talent_spell( talent_tree::SPECIALIZATION, "Haunt" );           // Should be ID 48181
 
-    talents.focused_malignancy = find_talent_spell( talent_tree::SPECIALIZATION, "Focused Malignancy" ); // Should be ID 399668
-
-    talents.withering_bolt = find_talent_spell( talent_tree::SPECIALIZATION, "Withering Bolt" ); // Should be ID 386976
-
+    talents.shadow_embrace = find_talent_spell( talent_tree::SPECIALIZATION, "Shadow Embrace" );  // Should be ID 32388
+    talents.shadow_embrace_debuff            = find_spell( 32390 );
+    talents.shadow_embrace_debuff_shadowbolt = find_spell( 453206 );
+    
     talents.sacrolashs_dark_strike = find_talent_spell( talent_tree::SPECIALIZATION, "Sacrolash's Dark Strike" ); // Should be ID 386986
+    
+    talents.summon_darkglare = find_talent_spell( talent_tree::SPECIALIZATION, "Summon Darkglare" ); // Should be ID 205180
+
+    talents.cunning_cruelty = find_talent_spell( talent_tree::SPECIALIZATION, "Cunning Cruelty" );
+
+    talents.infirmity        = find_talent_spell( talent_tree::SPECIALIZATION, "Infirmity" );
+    talents.infirmity_debuff = find_spell( 458219 );
+
+    talents.improved_haunt = find_talent_spell( talent_tree::SPECIALIZATION, "Improved Haunt" );
+
+    talents.malediction = find_talent_spell( talent_tree::SPECIALIZATION, "Malediction" );
+    
+    talents.malevolent_visionary = find_talent_spell( talent_tree::SPECIALIZATION, "Malevolent Visionary" ); // Should be ID 387273
+    
+    talents.contagion = find_talent_spell( talent_tree::SPECIALIZATION, "Contagion" );
+
+    talents.cull_the_weak = find_talent_spell( talent_tree::SPECIALIZATION, "Cull the Weak" );
+
 
     talents.creeping_death = find_talent_spell( talent_tree::SPECIALIZATION, "Creeping Death" ); // Should be ID 264000
 
-    talents.haunt = find_talent_spell( talent_tree::SPECIALIZATION, "Haunt" ); // Should be ID 48181
-
-    talents.summon_darkglare = find_talent_spell( talent_tree::SPECIALIZATION, "Summon Darkglare" ); // Should be ID 205180
-
     talents.soul_rot = find_talent_spell( talent_tree::SPECIALIZATION, "Soul Rot" ); // Should be ID 386997
-
-    talents.xavius_gambit = find_talent_spell( talent_tree::SPECIALIZATION, "Xavius' Gambit" ); // Should be ID 416615
 
     talents.tormented_crescendo = find_talent_spell( talent_tree::SPECIALIZATION, "Tormented Crescendo" ); // Should be ID 387075
     talents.tormented_crescendo_buff = find_spell( 387079 );
 
-    talents.malevolent_visionary = find_talent_spell( talent_tree::SPECIALIZATION, "Malevolent Visionary" ); // Should be ID 387273
+    talents.xavius_gambit = find_talent_spell( talent_tree::SPECIALIZATION, "Xavius' Gambit" ); // Should be ID 416615
+    
+    talents.focused_malignancy = find_talent_spell( talent_tree::SPECIALIZATION, "Focused Malignancy" ); // Should be ID 399668
 
-    talents.dark_harvest = find_talent_spell( talent_tree::SPECIALIZATION, "Dark Harvest" ); // Should be ID 387016
+    talents.perpetual_unstability = find_talent_spell( talent_tree::SPECIALIZATION, "Perpetual Unstability" );
+    talents.perpetual_unstability_dmg = find_spell( 459461 );
+
+    talents.malign_omen = find_talent_spell( talent_tree::SPECIALIZATION, "Malign Omen" );
+    talents.malign_omen_buff = find_spell( 458043 );
+
+    talents.relinquished = find_talent_spell( talent_tree::SPECIALIZATION, "Relinquished" );
+
+    talents.withering_bolt = find_talent_spell( talent_tree::SPECIALIZATION, "Withering Bolt" );  // Should be ID 386976
+
+    talents.improved_malefic_rapture = find_talent_spell( talent_tree::SPECIALIZATION, "Improved Malefic Rapture" );
+
+    talents.oblivion = find_talent_spell( talent_tree::SPECIALIZATION, "Oblivion" );
+
+    talents.deaths_embrace = find_talent_spell( talent_tree::SPECIALIZATION, "Death's Embrace" );
+
+    talents.dark_harvest = find_talent_spell( talent_tree::SPECIALIZATION, "Dark Harvest" );  // Should be ID 387016
     talents.dark_harvest_buff = find_spell( 387018 );
+
+    talents.ravenous_afflictions = find_talent_spell( talent_tree::SPECIALIZATION, "Ravenous Afflictions" );
+
+    talents.malefic_touch     = find_talent_spell( talent_tree::SPECIALIZATION, "Malefic Touch" );
+    talents.malefic_touch_dmg = find_spell( 458131 );
 
     // Additional Tier Set spell data
 
@@ -373,6 +430,12 @@ namespace warlock
     }
   }
 
+  void warlock_t::parse_player_effects()
+  {
+    parse_effects( talents.demonic_tactics );
+    parse_effects( talents.summoners_embrace );
+  }
+
   void warlock_t::create_buffs()
   {
     player_t::create_buffs();
@@ -408,6 +471,9 @@ namespace warlock
     buffs.rolling_havoc = make_buff( this, "rolling_havoc", talents.rolling_havoc_buff )
                               ->set_default_value( talents.rolling_havoc->effectN( 1 ).percent() )
                               ->add_invalidate( CACHE_PLAYER_DAMAGE_MULTIPLIER );
+    
+    // Run after all buffs to make sure they are initialised
+    parse_player_effects();
   }
 
   void warlock_t::create_buffs_affliction()
