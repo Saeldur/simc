@@ -214,6 +214,7 @@ public:
     player_talent_t improved_haunt; // TODO: New
     player_talent_t malediction; // TODO: New
     player_talent_t malevolent_visionary; // TODO: AoE behavior may have changed
+    const spell_data_t* malevolent_visionary_dmg;  // TODO: AoE behavior may have changed
     player_talent_t contagion; // TODO: New
     player_talent_t cull_the_weak; // TODO: New
 
@@ -592,6 +593,11 @@ public:
     proc_t* conflagration_of_chaos_cf;
     proc_t* conflagration_of_chaos_sb;
   } procs;
+
+  struct options_t 
+  {
+    bool individual_pet_reporting = false;
+  } options;
 
   int initial_soul_shards;
   std::string default_pet;

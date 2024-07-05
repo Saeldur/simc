@@ -149,7 +149,8 @@ namespace warlock
 
     talents.malediction = find_talent_spell( talent_tree::SPECIALIZATION, "Malediction" );
     
-    talents.malevolent_visionary = find_talent_spell( talent_tree::SPECIALIZATION, "Malevolent Visionary" ); // Should be ID 387273
+    talents.malevolent_visionary     = find_talent_spell( talent_tree::SPECIALIZATION, "Malevolent Visionary" ); // Should be ID 387273
+    talents.malevolent_visionary_dmg = find_spell( 453233 );
     
     talents.contagion = find_talent_spell( talent_tree::SPECIALIZATION, "Contagion" );
 
@@ -749,6 +750,7 @@ namespace warlock
     add_option( opt_int( "soul_shards", initial_soul_shards ) );
     add_option( opt_string( "default_pet", default_pet ) );
     add_option( opt_bool( "disable_felstorm", disable_auto_felstorm ) );
+    add_option( opt_bool( "warlock.individual_pet_reporting", options.individual_pet_reporting ) );
   }
 
   void warlock_t::combat_begin()

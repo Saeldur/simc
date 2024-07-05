@@ -263,6 +263,22 @@ warlock_pet_td_t::warlock_pet_td_t( player_t* target, warlock_pet_t& p ) :
 
 namespace pets
 {
+std::function<void( warlock_pet_t* )> parent_pet_action_fn( action_t* parent )
+{
+  return [ parent ]( warlock_pet_t* p ) {
+    if ( !p->o()->options.individual_pet_reporting )
+    {
+      for ( auto& a : p->action_list )
+      {
+        auto it = range::find( parent->child_action, a->name_str, &action_t::name_str );
+        if ( it != parent->child_action.end() )
+          a->stats = ( *it )->stats;
+        else
+          parent->add_child( a );
+      }
+    }
+  };
+}
 warlock_simple_pet_t::warlock_simple_pet_t( warlock_t* owner, util::string_view pet_name, pet_e pt )
   : warlock_pet_t( owner, pet_name, pt, true ), special_ability( nullptr )
 { resource_regeneration = regen_type::DISABLED; }
@@ -1641,7 +1657,7 @@ struct eye_beam_t : public warlock_pet_spell_t
     double dot_multiplier = p()->o()->talents.summon_darkglare->effectN( 3 ).percent();
 
     if ( p()->o()->talents.malevolent_visionary.ok() )
-      dot_multiplier += p()->o()->talents.malevolent_visionary->effectN( 1 ).percent();
+      m *= 1 + p()->o()->talents.malevolent_visionary->effectN( 1 ).percent();
 
     m *= 1.0 + ( dots * dot_multiplier );
 

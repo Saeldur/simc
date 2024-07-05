@@ -627,7 +627,9 @@ std::unique_ptr<expr_t> warlock_t::create_expression( util::string_view name_str
       // TOCHECK regularly.
 
       double average =
-          1.0 / ( 0.184 * std::pow( active_agonies, -2.0 / 3.0 ) ) * dot_tick_time.total_seconds() / active_agonies;
+          1.0 /
+          ( 0.184 * std::pow( active_agonies, -2.0 / 3.0 ) * ( 1 + talents.relinquished->effectN( 1 ).percent() ) ) *
+          dot_tick_time.total_seconds() / active_agonies;
 
       if ( sim->debug )
         sim->out_debug.printf( "time to shard return: %f", average );

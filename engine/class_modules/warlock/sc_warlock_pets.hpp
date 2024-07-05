@@ -127,6 +127,7 @@ struct warlock_pet_t : public pet_t
 
 namespace pets
 {
+std::function<void( warlock_pet_t* )> parent_pet_action_fn( action_t* parent );
 /**
  * A simple warlock pet that has a potential melee attack, and a single on-cooldown special ability
  * that it uses on cooldown.

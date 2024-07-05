@@ -922,17 +922,75 @@ using namespace helpers;
 
   // Shared Class Actions End
   // Affliction Actions Begin
-
   struct malefic_rapture_t : public warlock_spell_t
   {
-    struct malefic_rapture_damage_t : public warlock_spell_t
+    struct malefic_touch_damage_t : public warlock_spell_t
     {
-      malefic_rapture_damage_t( warlock_t* p )
-        : warlock_spell_t( "Malefic Rapture (hit)", p, p->warlock_base.malefic_rapture_dmg )
+      malefic_touch_damage_t( std::string_view name, warlock_t* p )
+        : warlock_spell_t( name, p, p->talents.malefic_touch_dmg )
       {
         background = dual = true;
+      }
+    };
+
+    struct malefic_rapture_state_t : public action_state_t
+    {
+      double cull_multiplier;
+
+      malefic_rapture_state_t( action_t* action, player_t* target )
+        : action_state_t( action, target ), cull_multiplier( 1.0 )
+      {
+      }
+
+      void initialize() override
+      {
+        action_state_t::initialize();
+        cull_multiplier = 1;
+      }
+
+      std::ostringstream& debug_str( std::ostringstream& s ) override
+      {
+        std::streamsize ss = s.precision();
+        s.precision( 4 );
+
+        s << " cull_multiplier=" << cull_multiplier;
+
+        s.precision( ss );
+
+        return s;
+      }
+
+      void copy_state( const action_state_t* s ) override
+      {
+        action_state_t::copy_state( s );
+
+        auto mrs        = debug_cast<const malefic_rapture_state_t*>( s );
+        cull_multiplier = mrs->cull_multiplier;
+      }
+
+      double composite_da_multiplier() const override
+      {
+        return action_state_t::composite_da_multiplier() * cull_multiplier;
+      }
+    };
+
+    using state_t = malefic_rapture_state_t;
+
+    struct malefic_rapture_damage_t : public warlock_spell_t
+    {
+      action_t* malefic_touch;
+      malefic_rapture_damage_t( warlock_t* p )
+        : warlock_spell_t( "Malefic Rapture (hit)", p, p->warlock_base.malefic_rapture_dmg ), malefic_touch()
+      {
+        background = dual      = true;
         spell_power_mod.direct = p->warlock_base.malefic_rapture->effectN( 1 ).sp_coeff();
-        callbacks = false; // Individual hits have been observed to not proc trinkets like Psyche Shredder
+        callbacks              = false;  // Individual hits have been observed to not proc trinkets like Psyche Shredder
+
+        if ( p->talents.malefic_touch.enabled() )
+        {
+          malefic_touch = get_action<malefic_touch_damage_t>( "Malefic Touch", p );
+          add_child( malefic_touch );
+        }
       }
 
       double composite_da_multiplier( const action_state_t* s ) const override
@@ -947,10 +1005,34 @@ using namespace helpers;
         return m;
       }
 
+      action_state_t* new_state() override
+      {
+        return new state_t( this, target );
+      }
+
+      state_t* cast_state( action_state_t* s )
+      {
+        return static_cast<state_t*>( s );
+      }
+
+      const state_t* cast_state( const action_state_t* s ) const
+      {
+        return static_cast<const state_t*>( s );
+      }
+
+      void impact( action_state_t* s ) override
+      {
+        warlock_spell_t::impact( s );
+
+        if ( malefic_touch && result_is_hit( s->result ) )
+          malefic_touch->execute_on_target( s->target );
+      }
+
       void execute() override
       {
         int d = td( target )->count_affliction_dots() - 1;
-        assert( d < as<int>( p()->procs.malefic_rapture.size() ) && "The procs.malefic_rapture array needs to be expanded." );
+        assert( d < as<int>( p()->procs.malefic_rapture.size() ) &&
+                "The procs.malefic_rapture array needs to be expanded." );
 
         if ( d >= 0 && d < as<int>( p()->procs.malefic_rapture.size() ) )
           p()->procs.malefic_rapture[ d ]->occur();
@@ -959,18 +1041,23 @@ using namespace helpers;
       }
     };
 
+    malefic_rapture_damage_t* malefic_rapture_damage;
+    double cull_mult;
+    unsigned int cull_max_targets;
     malefic_rapture_t( warlock_t* p, util::string_view options_str )
-      : warlock_spell_t( "Malefic Rapture", p, p->warlock_base.malefic_rapture, options_str )
+      : warlock_spell_t( "Malefic Rapture", p, p->warlock_base.malefic_rapture, options_str ),
+        cull_mult( p->talents.cull_the_weak->effectN( 1 ).percent() ),
+        cull_max_targets( as<unsigned int>( p->talents.cull_the_weak->effectN( 2 ).base_value() ) )
     {
       aoe = -1;
 
-      impact_action = new malefic_rapture_damage_t( p );
-      add_child( impact_action );
+      malefic_rapture_damage = new malefic_rapture_damage_t( p );
+      add_child( malefic_rapture_damage );
     }
 
     double cost_pct_multiplier() const override
     {
-      double c= warlock_spell_t::cost_pct_multiplier();
+      double c = warlock_spell_t::cost_pct_multiplier();
 
       if ( p()->buffs.tormented_crescendo->check() )
         c *= 1.0 + p()->talents.tormented_crescendo_buff->effectN( 3 ).percent();
@@ -997,6 +1084,25 @@ using namespace helpers;
       return target_list().size() > 0;
     }
 
+    void impact( action_state_t* s ) override
+    {
+      warlock_spell_t::impact( s );
+
+      if ( result_is_hit( s->result ) )
+      {
+        state_t* state = malefic_rapture_damage->cast_state( malefic_rapture_damage->get_state() );
+        state->target  = s->target;
+
+        if ( p()->talents.cull_the_weak.enabled() )
+        {
+          state->cull_multiplier = 1 + cull_mult * std::min( s->n_targets, cull_max_targets );
+        }
+
+        malefic_rapture_damage->snapshot_state( state, malefic_rapture_damage->amount_type( state ) );
+        malefic_rapture_damage->schedule_execute( state );
+      }
+    }
+
     void execute() override
     {
       warlock_spell_t::execute();
@@ -1008,7 +1114,7 @@ using namespace helpers;
     {
       warlock_spell_t::available_targets( tl );
 
-      range::erase_remove( tl, [ this ]( player_t* t ){ return td( t )->count_affliction_dots() == 0; } );
+      range::erase_remove( tl, [ this ]( player_t* t ) { return td( t )->count_affliction_dots() == 0; } );
 
       return tl.size();
     }
@@ -1078,7 +1184,7 @@ using namespace helpers;
       // results to within 0.1% of accuracy in all tests conducted on all targets numbers up to 8.
       // Accurate as of 08-24-2018. TOCHECK regularly. If any changes are made to this section of
       // code, please also update the Time_to_Shard expression in sc_warlock.cpp.
-      double increment_max = 0.368;
+      double increment_max = 0.368 * ( 1 + p()->talents.relinquished->effectN( 1 ).percent() );
 
       double active_agonies = p()->get_active_dots( d );
       increment_max *= std::pow( active_agonies, -2.0 / 3.0 );
@@ -1417,17 +1523,56 @@ using namespace helpers;
       warlock_spell_t::impact( s );
 
       if ( result_is_hit( s->result ) )
+      {
         td( s->target )->debuffs_haunt->trigger();
+        if ( p()->talents.improved_haunt.ok() )
+          td( s->target )->debuffs_shadow_embrace->trigger();
+      }
+    }
+  };
+
+  
+  struct malevolent_visionary_damage_t : public warlock_spell_t
+  {
+    malevolent_visionary_damage_t( std::string_view name, warlock_t* p )
+      : warlock_spell_t( name, p, p->talents.malevolent_visionary_dmg )
+    {
+      background = dual = true;
+    }
+
+    size_t available_targets( std::vector<player_t*>& tl )
+    {
+      warlock_spell_t::available_targets( tl );
+
+      range::erase_remove( tl, [ this ]( player_t* t ) { return td( t )->count_affliction_dots() == 0; } );
+
+      return tl.size();
+    }
+
+    void execute() override
+    {
+      target_cache.is_valid = false;
+      warlock_spell_t::execute();
     }
   };
 
   struct summon_darkglare_t : public warlock_spell_t
   {
+    action_t* malevolent_visionary;
     summon_darkglare_t( warlock_t* p, util::string_view options_str )
-      : warlock_spell_t( "Summon Darkglare", p, p->talents.summon_darkglare, options_str )
+      : warlock_spell_t( "Summon Darkglare", p, p->talents.summon_darkglare, options_str ), malevolent_visionary()
     {
       harmful = callbacks = true; // Set to true because of 10.1 class trinket
       may_crit = may_miss = false;
+      
+      if ( p->talents.malediction.enabled() )
+      {
+        malevolent_visionary = get_action<malevolent_visionary_damage_t>( "Malevolent Visionary", p );
+        add_child( malevolent_visionary );
+      }
+
+      p->warlock_pet_list.darkglares.set_creation_event_callback( pets::parent_pet_action_fn( this ) );
+       
     }
 
     void execute() override
@@ -1436,9 +1581,6 @@ using namespace helpers;
 
       timespan_t summon_duration = p()->talents.summon_darkglare->duration();
 
-      if ( p()->talents.malevolent_visionary.ok() )
-        summon_duration += p()->talents.malevolent_visionary->effectN( 2 ).time_value();
-
       p()->warlock_pet_list.darkglares.spawn( summon_duration );
 
       timespan_t darkglare_extension = timespan_t::from_seconds( p()->talents.summon_darkglare->effectN( 2 ).base_value() );
@@ -1446,6 +1588,9 @@ using namespace helpers;
       darkglare_extension_helper( darkglare_extension );
 
       p()->buffs.soul_rot->extend_duration( p(), darkglare_extension ); // This dummy buff is active while Soul Rot is ticking
+
+      if ( malevolent_visionary )
+        malevolent_visionary->execute();
     }
 
     void darkglare_extension_helper( timespan_t darkglare_extension )
