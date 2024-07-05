@@ -19,15 +19,32 @@ warlock_td_t::warlock_td_t( player_t* target, warlock_t& p )
   dots_drain_life_aoe = target->get_dot( "drain_life_aoe", &p );
 
   // Affliction
-  dots_corruption = target->get_dot( "corruption", &p );
-  dots_agony = target->get_dot( "agony", &p );
-  dots_drain_soul = target->get_dot( "drain_soul", &p );
+  dots_corruption          = target->get_dot( "corruption", &p );
+  dots_agony               = target->get_dot( "agony", &p );
+  dots_drain_soul          = target->get_dot( "drain_soul", &p );
   dots_phantom_singularity = target->get_dot( "phantom_singularity", &p );
-  dots_seed_of_corruption = target->get_dot( "seed_of_corruption", &p );
+  dots_seed_of_corruption  = target->get_dot( "seed_of_corruption", &p );
   dots_unstable_affliction = target->get_dot( "unstable_affliction", &p );
-  dots_vile_taint = target->get_dot( "vile_taint_dot", &p );
-  dots_soul_rot = target->get_dot( "soul_rot", &p );
-  dots_wither = target->get_dot( "wither", &p );
+  dots_vile_taint          = target->get_dot( "vile_taint_dot", &p );
+  dots_soul_rot            = target->get_dot( "soul_rot", &p );
+  dots_wither              = target->get_dot( "wither", &p );
+
+  debuffs_blackened_soul = make_buff( *this, "blackened_soul", p.hero.blackened_soul )
+                               ->set_max_stack( p.find_spell( 445474 )->max_stacks() );
+
+  debuffs_blackened_ticker =
+      make_buff( *this, "blackened_soul_ticker", p.hero.blackened_soul_ticker )
+          ->set_tick_callback( [ this, &p ]( buff_t* b, int, timespan_t ) { p.blackened_soul_helper( b->player, b ); } )
+          ->set_duration( 0_s );
+
+  /*{
+    warlock_td_t* td = p()->get_target_data( d->target );
+    if ( d->target->health_percentage() <= p()->hero.blackened_soul->effectN( 3 ).base_value() &&
+         !td->debuffs_blackened_ticker->check() )
+    {
+      td->debuffs_blackened_ticker->trigger();
+    }
+  }*/
 
   debuffs_haunt = make_buff( *this, "haunt", p.talents.haunt )
                       ->set_refresh_behavior( buff_refresh_behavior::PANDEMIC )
@@ -532,6 +549,84 @@ stat_e warlock_t::convert_hybrid_stat( stat_e s ) const
       return STAT_NONE;
     default:
       return s;
+  }
+}
+
+void warlock_t::increment_wither( int quantity, bool malefic_rapture )
+{
+  if ( !hero.wither.enabled() )
+    return;
+
+  for ( auto target : sim->target_non_sleeping_list )
+  {
+    warlock_td_t* td = get_target_data( target );
+    if ( !td )
+      continue;
+
+    auto wither_stacks = td->debuffs_blackened_soul;
+
+    // TODO: Blackened Soul extras.
+
+    if ( malefic_rapture && buffs.malevolence->check() && td->dots_unstable_affliction &&
+         td->dots_unstable_affliction->is_ticking() )
+    {
+      quantity++;
+    }
+
+    wither_stacks->increment( quantity );
+
+    if ( hero.blackened_soul.enabled() && !td->debuffs_blackened_ticker->check() )
+    {
+      if ( wither_stacks->stack() >= hero.blackened_soul->effectN( 2 ).base_value() )
+      {
+        td->debuffs_blackened_ticker->trigger();
+      }
+      else
+      {
+        for ( ; quantity > 0; quantity-- )
+        {
+          // TODO: DETERMINE BLACKENED SOUL CHANCE
+          if ( rng().roll( 0.1 ) )
+          {
+            td->debuffs_blackened_ticker->trigger();
+            break;
+          }
+        }
+      }
+    }
+  }
+}
+
+void warlock_t::blackened_soul_helper( player_t* target, buff_t* buff )
+{
+  if ( !target )
+    return;
+
+  warlock_td_t* td = get_target_data( target );
+  if ( !td )
+    return;
+
+  bool cancel_buff = false;
+
+  bool is_acute_perma =
+      target->health_percentage() <= hero.blackened_soul->effectN( 3 ).base_value() || buffs.malevolence->check();
+
+  auto wither_stacks = td->debuffs_blackened_soul;
+
+  if ( wither_stacks->stack() > 1 )
+  {
+    proc_actions.blackened_soul->execute_on_target( target );
+    wither_stacks->decrement();
+  }
+
+  if ( wither_stacks->stack() <= 1 )
+  {
+    cancel_buff = true;
+  }
+
+  if ( cancel_buff && !is_acute_perma )
+  {
+    make_event( sim, 0_s, [ this, buff ] { buff->expire(); } );
   }
 }
 

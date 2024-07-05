@@ -89,6 +89,8 @@ namespace warlock
     hero.seeds_of_their_demise = find_talent_spell( talent_tree::HERO, "Seeds of Their Demise" );
     hero.mark_of_perotharn     = find_talent_spell( talent_tree::HERO, "Mark of Peroth'arn" );
     hero.malevolence           = find_talent_spell( talent_tree::HERO, "Malevolence" );
+    hero.malevolence_damage    = find_spell( 446285 );
+    hero.malevolence_spell     = find_spell( 442726 );
   }
 
   void warlock_t::init_spells_affliction()
@@ -435,6 +437,7 @@ namespace warlock
   {
     parse_effects( talents.demonic_tactics );
     parse_effects( talents.summoners_embrace );
+    parse_effects( buffs.malevolence );
   }
 
   void warlock_t::create_buffs()
@@ -448,6 +451,10 @@ namespace warlock
     buffs.soulburn = make_buff( this, "soulburn", talents.soulburn_buff );
 
     buffs.pet_movement = make_buff( this, "pet_movement" )->set_max_stack( 100 );
+
+    // Hellcaller
+
+    buffs.malevolence = make_buff( this, "malevolence", hero.malevolence_spell )->set_chance( 1.0 );
 
     // Affliction buffs
     create_buffs_affliction();
@@ -656,6 +663,9 @@ namespace warlock
     procs.conflagration_of_chaos_sb = get_proc( "conflagration_of_chaos_sb" );
     procs.demonic_inspiration = get_proc( "demonic_inspiration" );
     procs.wrathful_minion = get_proc( "wrathful_minion" );
+
+    // Hellcaller
+    procs.seeds_of_their_demise = get_proc( "seeds_of_their_demise" );
   }
 
   void warlock_t::init_procs_affliction()

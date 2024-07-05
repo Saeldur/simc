@@ -38,6 +38,11 @@ struct warlock_td_t : public actor_target_data_t
   propagate_const<dot_t*> dots_drain_life;
   propagate_const<dot_t*> dots_corruption;
 
+  // Hellcaller
+
+  propagate_const<buff_t*> debuffs_blackened_soul;
+  propagate_const<buff_t*> debuffs_blackened_ticker;
+
   // Aff
   propagate_const<dot_t*> dots_agony;
   propagate_const<dot_t*> dots_seed_of_corruption;
@@ -448,6 +453,8 @@ public:
     player_talent_t mark_of_perotharn;
 
     player_talent_t malevolence;
+    const spell_data_t* malevolence_spell;
+    const spell_data_t* malevolence_damage;
 
     // Soul Harvester
     player_talent_t demonic_soul;
@@ -472,6 +479,7 @@ public:
     action_t* bilescourge_bombers_proc; // From Shadow Invocation talent
     action_t* rain_of_fire_tick;
     action_t* avatar_of_destruction; // Triggered when Ritual of Ruin is consumed
+    action_t* blackened_soul;
   } proc_actions;
 
   struct tier_sets_t
@@ -500,6 +508,9 @@ public:
     propagate_const<buff_t*> grimoire_of_sacrifice; // Buff which grants damage proc
     propagate_const<buff_t*> soulburn;
     propagate_const<buff_t*> pet_movement; // One unified buff for some form of pet movement stat tracking
+
+    // Hellcaller
+    propagate_const<buff_t*> malevolence;
 
     // Affliction Buffs
     propagate_const<buff_t*> nightfall;
@@ -566,6 +577,9 @@ public:
     proc_t* soul_conduit;
     proc_t* demonic_inspiration;
     proc_t* wrathful_minion;
+
+    // Hellcaller
+    proc_t* seeds_of_their_demise;
 
     // Affliction
     proc_t* nightfall;
@@ -694,6 +708,9 @@ public:
 
   pet_t* create_main_pet( util::string_view pet_name, util::string_view pet_type );
   std::unique_ptr<expr_t> create_pet_expression( util::string_view name_str );
+
+  void increment_wither( int quantity, bool malefic_rapture );
+  void blackened_soul_helper( player_t* target, buff_t* buff );
 };
 
 namespace helpers

@@ -603,7 +603,7 @@ using namespace helpers;
     {
       double m = warlock_spell_t::composite_da_multiplier( s );
 
-      m *= 1 + td( s->target )->dots_wither->current_stack() * p()->hero.mark_of_xavius->effectN( 3 ).percent();
+      m *= 1 + td( s->target )->debuffs_blackened_soul->check() * p()->hero.mark_of_xavius->effectN( 3 ).percent();
       return m;
     }
 
@@ -616,6 +616,7 @@ using namespace helpers;
         if ( p()->specialization() == WARLOCK_AFFLICTION )
         {
           p()->buffs.tormented_crescendo->trigger();
+          p()->procs.seeds_of_their_demise->occur();
         }
       }
     }
@@ -625,10 +626,11 @@ using namespace helpers;
   {
     struct wither_dot_t : public warlock_spell_t
     {
-      wither_dot_t( warlock_t* p ) : warlock_spell_t( "Wither", p, p->find_spell( 445474) )
+      wither_dot_t( warlock_t* p ) : warlock_spell_t( "Wither", p, p->find_spell( 445474 ) )
       {
         tick_zero  = false;
         background = dual = true;
+        dot_max_stack     = 1;
 
         if ( p->talents.absolute_corruption.ok() )
         {
@@ -640,6 +642,34 @@ using namespace helpers;
         }
 
         triggers.shadow_invocation_tick = true;
+      }
+
+      void trigger_dot( action_state_t* s )
+      {
+        warlock_spell_t::trigger_dot( s );
+
+        warlock_td_t* td = p()->get_target_data( s->target );
+        if ( td )
+        {
+          td->debuffs_blackened_soul->trigger();
+          if ( p()->buffs.malevolence->check() ||
+               s->target->health_percentage() <= p()->hero.blackened_soul->effectN( 3 ).base_value() )
+          {
+            td->debuffs_blackened_ticker->trigger();
+          }
+        }
+      }
+
+      void last_tick( dot_t* d ) override
+      {
+        warlock_spell_t::last_tick( d );
+ 
+        warlock_td_t* td = p()->get_target_data( d->target );
+        if ( td )
+        {
+          td->debuffs_blackened_soul->expire();
+          td->debuffs_blackened_ticker->expire();
+        }
       }
 
       void tick( dot_t* d ) override
@@ -667,6 +697,15 @@ using namespace helpers;
               p()->procs.nightfall->occur();
               p()->buffs.nightfall->trigger();
               p()->corruption_accumulator -= 1.0;
+            }
+          }
+          if ( p()->hero.blackened_soul->ok() )
+          {
+            warlock_td_t* td = p()->get_target_data( d->target );
+            if ( d->target->health_percentage() <= p()->hero.blackened_soul->effectN( 3 ).base_value() &&
+                 !td->debuffs_blackened_ticker->check() )
+            {
+              td->debuffs_blackened_ticker->trigger();
             }
           }
         }
@@ -920,6 +959,53 @@ using namespace helpers;
     }
   };
 
+  
+  struct malevolence_t : public warlock_spell_t
+  {
+    struct malevolence_damage_t : public warlock_spell_t
+    {
+      malevolence_damage_t( std::string_view name, warlock_t* p ) : warlock_spell_t( name, p, p->hero.malevolence_damage )
+      {
+        aoe        = -1;
+        background = dual = true;
+      }
+
+      size_t available_targets( std::vector<player_t*>& tl )
+      {
+        warlock_spell_t::available_targets( tl );
+
+        range::erase_remove( tl, [ this ]( player_t* t ) { return !td( t )->dots_wither->is_ticking(); } );
+
+        return tl.size();
+      }
+
+      void execute() override
+      {
+        target_cache.is_valid = false;
+        warlock_spell_t::execute();
+      }
+    };
+
+    action_t* damage_spell;
+    malevolence_t( warlock_t* p, util::string_view options_str )
+      : warlock_spell_t( "Malevolence", p,
+                         p->hero.malevolence.enabled() ? p->hero.malevolence_spell : spell_data_t::not_found(),
+                         options_str ),
+        damage_spell()
+    {
+      damage_spell = get_action<malevolence_damage_t>( "malevolence_damage", p );
+      add_child( damage_spell );
+    }
+
+    void execute() override
+    {
+      warlock_spell_t::execute();
+      damage_spell->execute();
+      p()->buffs.malevolence->trigger();
+      p()->increment_wither( 3, false );
+    }
+  };
+
   // Shared Class Actions End
   // Affliction Actions Begin
   struct malefic_rapture_t : public warlock_spell_t
@@ -1038,6 +1124,10 @@ using namespace helpers;
           p()->procs.malefic_rapture[ d ]->occur();
 
         warlock_spell_t::execute();
+        if ( p()->hero.blackened_soul.enabled() )
+        {
+          p()->increment_wither( 1, true );
+        }
       }
     };
 
@@ -1327,6 +1417,16 @@ using namespace helpers;
 
       warlock_spell_t::last_tick( d );
     }
+
+    void execute() override
+    {
+      warlock_spell_t::execute();
+      if ( p()->hero.blackened_soul.enabled() )
+      {
+        p()->increment_wither( 1, true );
+      }
+    }
+
   };
 
   struct drain_soul_t : public warlock_spell_t
@@ -3551,6 +3651,8 @@ using namespace helpers;
       return new soulburn_t( this, options_str );
     if ( action_name == "wither" && specialization() != WARLOCK_DESTRUCTION )
       return new wither_t( this, options_str, false );
+    if ( action_name == "malevolence" )
+      return new malevolence_t( this, options_str );
 
     return nullptr;
   }
@@ -3651,6 +3753,8 @@ using namespace helpers;
       create_destruction_proc_actions();
 
     player_t::create_actions();
+
+    proc_actions.blackened_soul = new blackened_soul_t( this );
   }
 
   void warlock_t::create_affliction_proc_actions()
