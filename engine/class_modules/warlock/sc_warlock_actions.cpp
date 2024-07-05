@@ -1666,7 +1666,7 @@ using namespace helpers;
       harmful = callbacks = true; // Set to true because of 10.1 class trinket
       may_crit = may_miss = false;
       
-      if ( p->talents.malediction.enabled() )
+      if ( p->talents.malevolent_visionary.enabled() )
       {
         malevolent_visionary = get_action<malevolent_visionary_damage_t>( "Malevolent Visionary", p );
         add_child( malevolent_visionary );
