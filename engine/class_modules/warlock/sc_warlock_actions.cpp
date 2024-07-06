@@ -827,9 +827,9 @@ using namespace helpers;
     }
   };
 
-  struct shadow_bolt_volley_t : public warlock_spell_t
+  struct shadowbolt_volley_t : public warlock_spell_t
   {
-    shadow_bolt_volley_t( std::string_view name, warlock_t* p )
+    shadowbolt_volley_t( std::string_view name, warlock_t* p )
       : warlock_spell_t( name, p, p->talents.cunning_cruelty_volley )
     {
     }
@@ -866,7 +866,7 @@ using namespace helpers;
 
       if ( p->talents.cunning_cruelty.enabled() )
       {
-        shadow_bolt_volley = get_action<shadow_bolt_volley_t>( "Shadow Bolt Volley", p );
+        shadow_bolt_volley = get_action<shadowbolt_volley_t>( "Shadowbolt Volley", p );
         add_child( shadow_bolt_volley );
       }
     }
@@ -1697,7 +1697,7 @@ using namespace helpers;
       channeled = true;
       if ( p->talents.cunning_cruelty.enabled() )
       {
-        shadow_bolt_volley = get_action<shadow_bolt_volley_t>( "Shadow Bolt Volley", p );
+        shadow_bolt_volley = get_action<shadowbolt_volley_t>( "Shadow Bolt Volley", p );
         add_child( shadow_bolt_volley );
       }
     }
