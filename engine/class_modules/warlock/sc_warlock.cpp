@@ -195,6 +195,7 @@ warlock_t::warlock_t( sim_t* sim, util::string_view name, race_e r )
     buffs(),
     gains(),
     procs(),
+    rppm(),
     initial_soul_shards( 3 ),
     default_pet(),
     disable_auto_felstorm( false )
@@ -556,6 +557,12 @@ void warlock_t::increment_wither( int quantity, bool malefic_rapture )
 {
   if ( !hero.wither.enabled() )
     return;
+
+  
+  if ( hero.bleakheart_tactics.ok() && rng().roll( 0.15 ) )
+  {
+    quantity++;
+  }
 
   for ( auto target : sim->target_non_sleeping_list )
   {

@@ -9,7 +9,8 @@ namespace warlock
 {
 using namespace helpers;
 
-  struct warlock_spell_t : public spell_t
+  using ab = parse_action_effects_t<spell_t>;
+  struct warlock_spell_t : public parse_action_effects_t<spell_t>
   {
     struct affected_by_t
     {
@@ -46,7 +47,7 @@ using namespace helpers;
     } triggers;
 
     warlock_spell_t( util::string_view token, warlock_t* p, const spell_data_t* s = spell_data_t::nil() )
-    : spell_t( token, p, s ),
+    : ab( token, p, s ),
       affected_by()
     {
       may_crit = true;
@@ -61,11 +62,38 @@ using namespace helpers;
       affected_by.houndmasters = data().affected_by( p->talents.the_houndmasters_stratagem_debuff->effectN( 1 ) );
 
       affected_by.roaring_blaze = data().affected_by( p->talents.conflagrate_debuff->effectN( 1 ) );
+
+      if ( ab::data().ok() )
+      {
+        apply_buff_effects();
+        apply_debuffs_effects();
+      }
     }
 
     warlock_spell_t( util::string_view token, warlock_t* p, const spell_data_t* s, util::string_view options_str )
       : warlock_spell_t( token, p, s )
-    { parse_options( options_str ); }
+    {
+      parse_options( options_str );
+    }
+
+    void apply_buff_effects()
+    {
+      parse_effects( p()->buffs.umbral_lattice );
+    }
+
+    void apply_debuffs_effects()
+    {
+    }
+    template <typename... Ts>
+    void parse_effects( Ts&&... args )
+    {
+      ab::parse_effects( std::forward<Ts>( args )... );
+    }
+    template <typename... Ts>
+    void parse_target_effects( Ts&&... args )
+    {
+      ab::parse_target_effects( std::forward<Ts>( args )... );
+    }
 
     warlock_t* p()
     { return static_cast<warlock_t*>( player ); }
@@ -80,11 +108,11 @@ using namespace helpers;
     { return p()->get_target_data( t ); }
 
     void reset() override
-    { spell_t::reset(); }
+    { ab::reset(); }
 
     void consume_resource() override
     {
-      spell_t::consume_resource();
+      ab::consume_resource();
 
       if ( resource_current == RESOURCE_SOUL_SHARD && p()->in_combat )
       {
@@ -124,7 +152,7 @@ using namespace helpers;
 
     void execute() override
     {
-      spell_t::execute();
+      ab::execute();
 
       if ( p()->talents.rolling_havoc.ok() && use_havoc() )
         p()->buffs.rolling_havoc->trigger();
@@ -132,7 +160,7 @@ using namespace helpers;
 
     void impact( action_state_t* s ) override
     {
-      spell_t::impact( s );
+      ab::impact( s );
 
       if ( p()->talents.reverse_entropy.ok() )
       {
@@ -165,7 +193,7 @@ using namespace helpers;
 
     void tick( dot_t* d ) override
     {
-      spell_t::tick( d );
+      ab::tick( d );
 
       if ( p()->talents.reverse_entropy.ok() )
       {
@@ -182,7 +210,7 @@ using namespace helpers;
 
     double composite_target_multiplier( player_t* t ) const override
     {
-      double m = spell_t::composite_target_multiplier( t );
+      double m = ab::composite_target_multiplier( t );
 
       if ( p()->talents.the_houndmasters_stratagem.ok() && affected_by.houndmasters )
         m *= 1.0 + td( t )->debuffs_the_houndmasters_stratagem->check_value();
@@ -195,7 +223,7 @@ using namespace helpers;
 
     double action_multiplier() const override
     {
-      double m = spell_t::action_multiplier();
+      double m = ab::action_multiplier();
 
       if ( demonology() && affected_by.master_demonologist_dd )
         m *= 1.0 + p()->cache.mastery_value();
@@ -216,7 +244,7 @@ using namespace helpers;
 
     double composite_da_multiplier( const action_state_t* s ) const override
     {
-      double m = spell_t::composite_da_multiplier( s );
+      double m = ab::composite_da_multiplier( s );
 
       if ( affliction() && affected_by.potent_afflictions_dd )
         m *= 1.0 + p()->cache.mastery_value();
@@ -226,7 +254,7 @@ using namespace helpers;
 
     double composite_ta_multiplier( const action_state_t* s ) const override
     {
-      double m = spell_t::composite_ta_multiplier( s );
+      double m = ab::composite_ta_multiplier( s );
 
       if ( affliction() && affected_by.potent_afflictions_td )
         m *= 1.0 + p()->cache.mastery_value();
@@ -255,7 +283,7 @@ using namespace helpers;
     {
       auto saved_target = target;
 
-      bool passed = spell_t::select_target();
+      bool passed = ab::select_target();
 
       if ( passed && target != saved_target && use_havoc() )
         target_cache.is_valid = false;
@@ -267,18 +295,18 @@ using namespace helpers;
     {
       if ( destruction() && use_havoc() )
       {
-        assert( spell_t::n_targets() == 0 );
+        assert( ab::n_targets() == 0 );
         return 2;
       }
       else
       {
-        return spell_t::n_targets();
+        return ab::n_targets();
       }
     }
 
     size_t available_targets( std::vector<player_t*>& tl ) const override
     {
-      spell_t::available_targets( tl );
+      ab::available_targets( tl );
 
       // Check target list size to prevent some silly scenarios where Havoc target
       // is the only target in the list.
@@ -299,7 +327,7 @@ using namespace helpers;
 
     void init() override
     {
-      spell_t::init();
+      ab::init();
 
       if ( destruction() && affected_by.havoc )
       {
@@ -551,7 +579,26 @@ using namespace helpers;
               p()->corruption_accumulator -= 1.0;
             }
           }
+
+          if ( p()->talents.ravenous_afflictions.enabled() && d->state->result == RESULT_CRIT &&
+               p()->rppm.ravenous_afflictions->trigger() )
+          {
+            p()->buffs.nightfall->trigger();
+          }
         }
+      }
+
+      double composite_target_multiplier( player_t* target ) const override
+      {
+        auto m = warlock_spell_t::composite_target_multiplier( target );
+
+        if ( p()->talents.deaths_embrace.enabled() &&
+             target->health_percentage() <= p()->talents.deaths_embrace->effectN( 4 ).base_value() )
+        {
+          m *= 1 + p()->talents.deaths_embrace->effectN( 3 ).percent();
+        }
+
+        return m;
       }
 
       double composite_ta_multiplier( const action_state_t* s ) const override
@@ -660,6 +707,19 @@ using namespace helpers;
         }
       }
 
+      double composite_target_multiplier( player_t* target ) const override
+      {
+        auto m = warlock_spell_t::composite_target_multiplier( target );
+
+        if ( p()->talents.deaths_embrace.enabled() &&
+             target->health_percentage() <= p()->talents.deaths_embrace->effectN( 4 ).base_value() )
+        {
+          m *= 1 + p()->talents.deaths_embrace->effectN( 3 ).percent();
+        }
+
+        return m;
+      }
+
       void last_tick( dot_t* d ) override
       {
         warlock_spell_t::last_tick( d );
@@ -678,6 +738,25 @@ using namespace helpers;
 
         if ( result_is_hit( d->state->result ) )
         {
+          if ( p()->hero.mark_of_perotharn.ok() && d->state->result == RESULT_CRIT && rng().roll( 0.15 ) )
+          {
+            warlock_td_t* td = p()->get_target_data( d->target );
+            if ( td )
+            {
+              td->debuffs_blackened_soul->increment();
+              if ( p()->hero.bleakheart_tactics.ok() && rng().roll( 0.15 ) )
+              {
+                td->debuffs_blackened_soul->increment();
+              }
+            }
+          }
+
+          if ( p()->talents.ravenous_afflictions.enabled() && d->state->result == RESULT_CRIT &&
+               p()->rppm.ravenous_afflictions->trigger() )
+          {
+            p()->buffs.nightfall->trigger();
+          }
+
           if ( p()->talents.nightfall.ok() )
           {
             // Blizzard did not publicly release how nightfall was changed.
@@ -748,10 +827,33 @@ using namespace helpers;
     }
   };
 
+  struct shadow_bolt_volley_t : public warlock_spell_t
+  {
+    shadow_bolt_volley_t( std::string_view name, warlock_t* p )
+      : warlock_spell_t( name, p, p->talents.cunning_cruelty_volley )
+    {
+    }
+
+    double composite_da_multiplier( const action_state_t* s ) const override
+    {
+      auto m = warlock_spell_t::composite_da_multiplier( s );
+
+      m *= 1 + p()->talents.improved_shadow_bolt->effectN( 2 ).percent();
+      m *= 1 + p()->talents.sargerei_technique->effectN( 1 ).percent();
+
+      return m;
+    }
+  };
+
   struct shadow_bolt_t : public warlock_spell_t
   {
+
+    action_t* shadow_bolt_volley;
     shadow_bolt_t( warlock_t* p, util::string_view options_str )
-      : warlock_spell_t( "Shadow Bolt", p, p->talents.drain_soul->ok() ? spell_data_t::not_found() : p->warlock_base.shadow_bolt, options_str )
+      : warlock_spell_t( "Shadow Bolt", p,
+                         p->talents.drain_soul->ok() ? spell_data_t::not_found() : p->warlock_base.shadow_bolt,
+                         options_str ),
+        shadow_bolt_volley()
     {
       triggers.shadow_invocation_direct = true;
 
@@ -760,6 +862,12 @@ using namespace helpers;
         energize_type = action_energize::ON_CAST;
         energize_resource = RESOURCE_SOUL_SHARD;
         energize_amount = 1.0;
+      }
+
+      if ( p->talents.cunning_cruelty.enabled() )
+      {
+        shadow_bolt_volley = get_action<shadow_bolt_volley_t>( "Shadow Bolt Volley", p );
+        add_child( shadow_bolt_volley );
       }
     }
 
@@ -788,6 +896,11 @@ using namespace helpers;
 
       if ( result_is_hit( s->result ) )
       {
+        if ( shadow_bolt_volley && rng().roll( 0.5 ) )
+        {
+          shadow_bolt_volley->execute_on_target( s->target );
+        }
+
         if ( p()->talents.shadow_embrace.ok() )
           td( s->target )->debuffs_shadow_embrace->trigger();
 
@@ -1088,6 +1201,22 @@ using namespace helpers;
         if ( p()->talents.focused_malignancy.ok() && td( s->target )->dots_unstable_affliction->is_ticking() )
           m *= 1.0 + p()->talents.focused_malignancy->effectN( 1 ).percent();
 
+        if ( p()->buffs.malign_omen->check() )
+          m *= 1.0 + p()->talents.malign_omen_buff->effectN( 1 ).percent();
+
+        return m;
+      }
+
+      double composite_target_multiplier( player_t* target ) const override
+      {
+        auto m = warlock_spell_t::composite_target_multiplier( target );
+
+        if ( p()->talents.deaths_embrace.enabled() &&
+             target->health_percentage() <= p()->talents.deaths_embrace->effectN( 4 ).base_value() )
+        {
+          m *= 1 + p()->talents.deaths_embrace->effectN( 3 ).percent();
+        }
+
         return m;
       }
 
@@ -1112,6 +1241,21 @@ using namespace helpers;
 
         if ( malefic_touch && result_is_hit( s->result ) )
           malefic_touch->execute_on_target( s->target );
+
+        if ( p()->buffs.malign_omen->check() )
+        {
+          const auto& td = p()->get_target_data( s->target );
+
+          auto extension = timespan_t::from_seconds( p()->talents.malign_omen_buff->effectN( 2 ).base_value() );
+
+          td->dots_agony->adjust_duration( extension );
+          td->dots_corruption->adjust_duration( extension );
+          td->dots_wither->adjust_duration( extension );
+          td->dots_phantom_singularity->adjust_duration( extension );
+          td->dots_vile_taint->adjust_duration( extension );
+          td->dots_unstable_affliction->adjust_duration( extension );
+          td->dots_soul_rot->adjust_duration( extension );
+        }
       }
 
       void execute() override
@@ -1124,6 +1268,14 @@ using namespace helpers;
           p()->procs.malefic_rapture[ d ]->occur();
         
         warlock_spell_t::execute();
+
+        if ( p()->sets->has_set_bonus( WARLOCK_AFFLICTION, TWW1, B4 ) )
+
+        {
+          p()->buffs.umbral_lattice->trigger();
+        }
+
+        p()->buffs.malign_omen->decrement();
       }
     };
 
@@ -1211,11 +1363,28 @@ using namespace helpers;
     }
   };
 
+  struct perpetual_unstability_t : public warlock_spell_t
+  {
+    perpetual_unstability_t( std::string_view name, warlock_t* p )
+      : warlock_spell_t( name, p, p->talents.perpetual_unstability_dmg )
+    {
+    }
+  };
+
   struct unstable_affliction_t : public warlock_spell_t
   {
+    action_t* perpetual_unstability;
     unstable_affliction_t( warlock_t* p, util::string_view options_str )
-      : warlock_spell_t( "Unstable Affliction", p, p->talents.unstable_affliction, options_str )
-    { dot_duration += p->talents.unstable_affliction_3->effectN( 1 ).time_value(); }
+      : warlock_spell_t( "Unstable Affliction", p, p->talents.unstable_affliction, options_str ),
+        perpetual_unstability()
+    {
+      dot_duration += p->talents.unstable_affliction_3->effectN( 1 ).time_value();
+      if ( p->talents.perpetual_unstability.enabled() )
+      {
+        perpetual_unstability = get_action<perpetual_unstability_t>( "Perpetual Unstability", p );
+        add_child( perpetual_unstability );
+      }
+    }
 
     void execute() override
     {
@@ -1225,6 +1394,45 @@ using namespace helpers;
       p()->ua_target = target;
 
       warlock_spell_t::execute();
+    }
+
+    double composite_target_multiplier( player_t* target ) const override
+    {
+      auto m = warlock_spell_t::composite_target_multiplier( target );
+
+      if ( p()->talents.deaths_embrace.enabled() &&
+           target->health_percentage() <= p()->talents.deaths_embrace->effectN( 4 ).base_value() )
+      {
+        m *= 1 + p()->talents.deaths_embrace->effectN( 3 ).percent();
+      }
+
+      return m;
+    }
+    
+    void tick( dot_t* d ) override
+    {
+      warlock_spell_t::tick( d );
+
+      if ( p()->talents.ravenous_afflictions.enabled() && d->state->result == RESULT_CRIT &&
+           p()->rppm.ravenous_afflictions->trigger() )
+      {
+        p()->buffs.nightfall->trigger();
+      }
+    }
+
+    void impact( action_state_t* s ) override
+    {
+      bool pu_trigger = p()->talents.perpetual_unstability->ok() &&
+                        td( s->target )->dots_unstable_affliction->is_ticking() &&
+                        td( s->target )->dots_unstable_affliction->remains() <
+                            timespan_t::from_seconds( p()->talents.perpetual_unstability->effectN( 1 ).base_value() );
+
+      warlock_spell_t::impact( s );
+
+      if ( pu_trigger && perpetual_unstability )
+      {
+        perpetual_unstability->execute_on_target( s->target );
+      }
     }
 
     void last_tick( dot_t* d ) override
@@ -1253,6 +1461,19 @@ using namespace helpers;
         p()->agony_accumulator = rng().range( 0.0, 0.99 );
 
       warlock_spell_t::last_tick( d );
+    }
+
+    double composite_target_multiplier( player_t* target ) const override
+    {
+      auto m = warlock_spell_t::composite_target_multiplier( target );
+
+      if ( p()->talents.deaths_embrace.enabled() &&
+           target->health_percentage() <= p()->talents.deaths_embrace->effectN( 4 ).base_value() )
+      {
+        m *= 1 + p()->talents.deaths_embrace->effectN( 3 ).percent();
+      }
+
+      return m;
     }
 
     void execute() override
@@ -1293,6 +1514,12 @@ using namespace helpers;
       }
 
       warlock_spell_t::tick( d );
+      
+      if ( p()->talents.ravenous_afflictions.enabled() && d->state->result == RESULT_CRIT &&
+           p()->rppm.ravenous_afflictions->trigger() )
+      {
+        p()->buffs.nightfall->trigger();
+      }
 
       td( d->state->target )->dots_agony->increment( 1 );
     }
@@ -1460,9 +1687,20 @@ using namespace helpers;
       }
     };
 
+    action_t* shadow_bolt_volley;
     drain_soul_t( warlock_t* p, util::string_view options_str )
-      : warlock_spell_t( "Drain Soul", p, p->talents.drain_soul->ok() ? p->talents.drain_soul_dot : spell_data_t::not_found(), options_str )
-    { channeled = true; }
+      : warlock_spell_t( "Drain Soul", p,
+                         p->talents.drain_soul->ok() ? p->talents.drain_soul_dot : spell_data_t::not_found(),
+                         options_str ),
+        shadow_bolt_volley()
+    {
+      channeled = true;
+      if ( p->talents.cunning_cruelty.enabled() )
+      {
+        shadow_bolt_volley = get_action<shadow_bolt_volley_t>( "Shadow Bolt Volley", p );
+        add_child( shadow_bolt_volley );
+      }
+    }
 
     action_state_t* new_state() override
     { return new drain_soul_state_t( this, target ); }
@@ -1507,6 +1745,11 @@ using namespace helpers;
       {
         if ( p()->talents.shadow_embrace.ok() )
           td( d->target )->debuffs_shadow_embrace->trigger();
+
+        if ( shadow_bolt_volley && rng().roll( 0.25 ) )
+        {
+          shadow_bolt_volley->execute_on_target( d->state->target );
+        }
 
         if ( p()->talents.tormented_crescendo.ok() )
         {
@@ -1704,6 +1947,7 @@ using namespace helpers;
 
         td->dots_agony->adjust_duration( darkglare_extension );
         td->dots_corruption->adjust_duration( darkglare_extension );
+        td->dots_wither->adjust_duration( darkglare_extension );
         td->dots_phantom_singularity->adjust_duration( darkglare_extension );
         td->dots_vile_taint->adjust_duration( darkglare_extension );
         td->dots_unstable_affliction->adjust_duration( darkglare_extension );
@@ -1723,6 +1967,9 @@ using namespace helpers;
       warlock_spell_t::execute();
 
       p()->buffs.soul_rot->trigger();
+
+      if ( p()->talents.malign_omen.enabled() )
+        p()->buffs.malign_omen->trigger();
     }
 
     void impact( action_state_t* s ) override
@@ -1769,11 +2016,6 @@ using namespace helpers;
     void execute() override
     {
       warlock_spell_t::execute();
-
-      if ( p()->hero.blackened_soul.enabled() )
-      {
-        p()->increment_wither( 1, true );
-      }
     }
   };
 

@@ -213,6 +213,7 @@ public:
     player_talent_t sacrolashs_dark_strike; // Increased Corruption ticking damage, and ticks extend Curses (not implemented)
     player_talent_t summon_darkglare;
     player_talent_t cunning_cruelty; // TODO: New
+    const spell_data_t* cunning_cruelty_volley;  // 458219
     player_talent_t infirmity; // TODO: Move from tier sets
     const spell_data_t* infirmity_debuff; // 458219
 
@@ -518,6 +519,8 @@ public:
     propagate_const<buff_t*> tormented_crescendo;
     propagate_const<buff_t*> dark_harvest_haste; // One buff in game...
     propagate_const<buff_t*> dark_harvest_crit; // ...but split into two in simc for better handling
+    propagate_const<buff_t*> malign_omen;
+    propagate_const<buff_t*> umbral_lattice;
 
     // Demonology Buffs
     propagate_const<buff_t*> demonic_core;
@@ -607,6 +610,11 @@ public:
     proc_t* conflagration_of_chaos_cf;
     proc_t* conflagration_of_chaos_sb;
   } procs;
+
+  struct realppm_t
+  {
+    propagate_const<real_ppm_t*> ravenous_afflictions;
+  } rppm;
 
   struct options_t 
   {

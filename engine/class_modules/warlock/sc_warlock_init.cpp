@@ -143,6 +143,7 @@ namespace warlock
     talents.summon_darkglare = find_talent_spell( talent_tree::SPECIALIZATION, "Summon Darkglare" ); // Should be ID 205180
 
     talents.cunning_cruelty = find_talent_spell( talent_tree::SPECIALIZATION, "Cunning Cruelty" );
+    talents.cunning_cruelty_volley = find_spell( 453176 );
 
     talents.infirmity        = find_talent_spell( talent_tree::SPECIALIZATION, "Infirmity" );
     talents.infirmity_debuff = find_spell( 458219 );
@@ -438,6 +439,8 @@ namespace warlock
     parse_effects( talents.demonic_tactics );
     parse_effects( talents.summoners_embrace );
     parse_effects( buffs.malevolence );
+    parse_effects( hero.xalans_ferocity );
+    parse_effects( hero.xalans_cruelty );
   }
 
   void warlock_t::create_buffs()
@@ -490,6 +493,10 @@ namespace warlock
                           ->set_trigger_spell( talents.nightfall );
 
     buffs.tormented_crescendo = make_buff( this, "tormented_crescendo", talents.tormented_crescendo_buff );
+
+    buffs.malign_omen = make_buff( this, "malign_omen", talents.malign_omen_buff )->set_reverse( true );
+
+    buffs.umbral_lattice = make_buff( this, "umbral_lattice", find_spell( 455679 ) )->set_chance( 0.3 );
   }
 
   void warlock_t::create_buffs_demonology()
@@ -707,7 +714,9 @@ namespace warlock
   }
 
   void warlock_t::init_rng_affliction()
-  { }
+  { 
+      rppm.ravenous_afflictions = get_rppm( "ravenous_afflictions", talents.ravenous_afflictions );
+  }
 
   void warlock_t::init_rng_demonology()
   { }
