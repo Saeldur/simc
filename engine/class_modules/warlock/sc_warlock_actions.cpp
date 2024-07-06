@@ -1183,7 +1183,6 @@ using namespace helpers;
         : warlock_spell_t( "Malefic Rapture (hit)", p, p->warlock_base.malefic_rapture_dmg ), malefic_touch()
       {
         background = dual      = true;
-        spell_power_mod.direct = p->warlock_base.malefic_rapture->effectN( 1 ).sp_coeff();
         callbacks              = false;  // Individual hits have been observed to not proc trinkets like Psyche Shredder
 
         if ( p->talents.malefic_touch.enabled() )
