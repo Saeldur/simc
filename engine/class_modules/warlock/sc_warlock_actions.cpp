@@ -1697,7 +1697,7 @@ using namespace helpers;
       channeled = true;
       if ( p->talents.cunning_cruelty.enabled() )
       {
-        shadow_bolt_volley = get_action<shadowbolt_volley_t>( "Shadow Bolt Volley", p );
+        shadow_bolt_volley = get_action<shadowbolt_volley_t>( "Shadowbolt Volley", p );
         add_child( shadow_bolt_volley );
       }
     }
