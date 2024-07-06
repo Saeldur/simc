@@ -1149,6 +1149,7 @@ using namespace helpers;
 
       std::ostringstream& debug_str( std::ostringstream& s ) override
       {
+        action_state_t::debug_str( s ); 
         std::streamsize ss = s.precision();
         s.precision( 4 );
 
