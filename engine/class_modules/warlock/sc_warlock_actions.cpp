@@ -1369,6 +1369,7 @@ using namespace helpers;
     perpetual_unstability_t( std::string_view name, warlock_t* p )
       : warlock_spell_t( name, p, p->talents.perpetual_unstability_dmg )
     {
+      background = dual = true;
     }
   };
 
@@ -1425,7 +1426,7 @@ using namespace helpers;
     {
       bool pu_trigger = p()->talents.perpetual_unstability->ok() &&
                         td( s->target )->dots_unstable_affliction->is_ticking() &&
-                        td( s->target )->dots_unstable_affliction->remains() <
+                        td( s->target )->dots_unstable_affliction->remains() <=
                             timespan_t::from_seconds( p()->talents.perpetual_unstability->effectN( 1 ).base_value() );
 
       warlock_spell_t::impact( s );
@@ -1444,16 +1445,32 @@ using namespace helpers;
     }
   };
 
+  struct volatile_agony_t : public warlock_spell_t
+  {
+    volatile_agony_t( std::string_view name, warlock_t* p ) : warlock_spell_t( name, p, p->talents.volatile_agony_dmg )
+    {
+      background = dual   = true;
+      reduced_aoe_targets = p->talents.volatile_agony->effectN( 2 ).base_value();
+      aoe                 = -1;
+    }
+  };
+
   struct agony_t : public warlock_spell_t
   {
     bool from_vt;
+    action_t* volatile_agony;
     agony_t( warlock_t* p, util::string_view options_str, bool from_taint = false ) 
-      : warlock_spell_t( "Agony", p, p->warlock_base.agony, options_str ), from_vt( from_taint )
+      : warlock_spell_t( "Agony", p, p->warlock_base.agony, options_str ), from_vt( from_taint ), volatile_agony()
     {
       may_crit = false;
 
       dot_max_stack = as<int>( data().max_stacks() + p->warlock_base.agony_2->effectN( 1 ).base_value() );
       dot_max_stack += as<int>( p->talents.writhe_in_agony->effectN( 1 ).base_value() ); // TOCHECK: Moved this from init(), is this ok?
+      if ( p->talents.volatile_agony.enabled() )
+      {
+        volatile_agony = get_action<volatile_agony_t>( "volatile_agony", p );
+        add_child( volatile_agony );
+      }
     }
 
     void last_tick ( dot_t* d ) override
@@ -1523,6 +1540,20 @@ using namespace helpers;
       }
 
       td( d->state->target )->dots_agony->increment( 1 );
+    }
+
+    void impact( action_state_t* s ) override
+    {
+      bool va_trigger = p()->talents.volatile_agony->ok() && td( s->target )->dots_agony->is_ticking() &&
+                        td( s->target )->dots_agony->remains() <=
+                            timespan_t::from_seconds( p()->talents.volatile_agony->effectN( 1 ).base_value() );
+
+      warlock_spell_t::impact( s );
+
+      if ( va_trigger && volatile_agony )
+      {
+        volatile_agony->execute_on_target( s->target );
+      }
     }
   };
 
@@ -1883,6 +1914,7 @@ using namespace helpers;
       : warlock_spell_t( name, p, p->talents.malevolent_visionary_dmg )
     {
       background = dual = true;
+      aoe               = -1;
     }
 
     size_t available_targets( std::vector<player_t*>& tl )
