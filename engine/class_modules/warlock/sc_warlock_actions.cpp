@@ -429,7 +429,10 @@ using namespace helpers;
 
       if ( destruction() && affected_by.chaotic_energies )
       {
-        double min_percentage = affected_by.chaos_incarnate ? p()->talents.chaos_incarnate->effectN( 1 ).percent() : 0.5;
+        double min_percentage       = p()->buffs.destro_jackpot->check() ? 1.0
+                                      : affected_by.chaos_incarnate ? p()->talents.chaos_incarnate->effectN( 1 ).percent()
+                                                                    : 0.5;
+
         double chaotic_energies_rng = rng().range( min_percentage , 1.0 );
 
         if ( p()->normalize_destruction_mastery )
@@ -1271,6 +1274,11 @@ using namespace helpers;
 
           p()->resource_gain( RESOURCE_SOUL_SHARD, 0.1, p()->gains.wither );
 
+          if (p()->talents.demonfire_infusion.enabled() && rng().roll(p()->talents.demonfire_infusion->effectN(2).percent()))
+          {
+            p()->proc_actions.channel_demonfire_tick->execute_on_target( d->target );
+          }
+
           if ( p()->talents.flashpoint.ok() && d->state->target->health_percentage() >= p()->talents.flashpoint->effectN( 2 ).base_value() )
             p()->buffs.flashpoint->trigger();
         }
@@ -1751,6 +1759,30 @@ using namespace helpers;
         perpetual_unstability = new perpetual_unstability_t( p );
         add_child( perpetual_unstability );
       }
+    }
+
+    double composite_ta_multiplier( const action_state_t* s ) const override
+    {
+      double m = warlock_spell_t::composite_ta_multiplier( s );
+
+      if ( p()->tier.fiendtracer_aff_4pc->ok() && p()->buffs.aff_jackpot->check() )
+      {
+        m *= 1 + p()->tier.fiendtracer_aff_4pc->effectN( 1 ).percent();
+      }
+
+      return m;
+    }
+
+    double composite_da_multiplier( const action_state_t* s ) const override
+    {
+      double m = warlock_spell_t::composite_da_multiplier( s );
+
+      if ( p()->tier.fiendtracer_aff_4pc->ok() && p()->buffs.aff_jackpot->check() )
+      {
+        m *= 1 + p()->tier.fiendtracer_aff_4pc->effectN( 1 ).percent();
+      }
+
+      return m;
     }
 
     double execute_time_pct_multiplier() const override
@@ -2321,6 +2353,8 @@ using namespace helpers;
 
     void execute() override
     {
+      helpers::trigger_jackpot( p(), target );
+
       warlock_spell_t::execute();
 
       p()->warlock_pet_list.darkglares.spawn( p()->talents.summon_darkglare->duration() );
@@ -3346,6 +3380,12 @@ using namespace helpers;
 
         if ( p()->bugs && p()->talents.diabolic_embers.ok() && s->result == RESULT_CRIT )
           p()->resource_gain( RESOURCE_SOUL_SHARD, 0.1, p()->gains.incinerate_crits );
+
+        if ( p()->talents.demonfire_infusion.enabled() &&
+             rng().roll( p()->talents.demonfire_infusion->effectN( 2 ).percent() ) )
+        {
+          p()->proc_actions.channel_demonfire_tick->execute_on_target( s->target );
+        }
       }
 
       double action_multiplier() const override
@@ -3437,6 +3477,12 @@ using namespace helpers;
 
       if ( s->result == RESULT_CRIT )
         p()->resource_gain( RESOURCE_SOUL_SHARD, 0.1 * energize_mult, p()->gains.incinerate_crits );
+
+      if ( p()->talents.demonfire_infusion.enabled() &&
+           rng().roll( p()->talents.demonfire_infusion->effectN( 2 ).percent() ) )
+      {
+        p()->proc_actions.channel_demonfire_tick->execute_on_target( s->target );
+      }
     }
 
     double action_multiplier() const override
@@ -3494,6 +3540,13 @@ using namespace helpers;
           p()->resource_gain( RESOURCE_SOUL_SHARD, 0.1, p()->gains.immolate_crits );
 
         p()->resource_gain( RESOURCE_SOUL_SHARD, 0.1, p()->gains.immolate );
+
+        
+        if ( p()->talents.demonfire_infusion.enabled() &&
+             rng().roll( p()->talents.demonfire_infusion->effectN( 1 ).percent() ) )
+        {
+          p()->proc_actions.channel_demonfire_tick->execute_on_target( d->target );
+        }
 
         if ( p()->talents.flashpoint.ok() && d->state->target->health_percentage() >= p()->talents.flashpoint->effectN( 2 ).base_value() )
           p()->buffs.flashpoint->trigger();
@@ -4012,13 +4065,13 @@ using namespace helpers;
   {
     struct channel_demonfire_tick_t : public warlock_spell_t
     {
-      channel_demonfire_tick_t( warlock_t* p )
-        : warlock_spell_t( "Channel Demonfire (tick)", p, p->talents.channel_demonfire_tick )
+      channel_demonfire_tick_t( warlock_t* p, std::string_view name, const spell_data_t* s, double effectiveness )
+        : warlock_spell_t( name, p, s )
       {
         background = dual = true;
-        may_miss = false;
-        aoe = -1;
-        travel_speed = p->talents.channel_demonfire_travel->missile_speed();
+        may_miss          = false;
+        aoe               = -1;
+        travel_speed      = p->talents.channel_demonfire_travel->missile_speed();
 
         affected_by.chaotic_energies = true;
 
@@ -4027,6 +4080,18 @@ using namespace helpers;
         spell_power_mod.direct = p->talents.channel_demonfire_tick->effectN( 1 ).sp_coeff();
 
         base_dd_multiplier *= 1.0 + p->talents.demonfire_mastery->effectN( 1 ).percent();
+
+        base_dd_multiplier *= effectiveness;
+      }
+
+      channel_demonfire_tick_t( warlock_t* p )
+        : channel_demonfire_tick_t( p, "Channel Demonfire (tick)", p->talents.channel_demonfire_tick, 1.0 )
+      {
+      }
+
+      channel_demonfire_tick_t( warlock_t* p, std::string_view name, double effectiveness )
+        : channel_demonfire_tick_t( p, name, p->talents.channel_demonfire_tick, effectiveness )
+      {
       }
 
       void impact( action_state_t* s ) override
@@ -4203,6 +4268,8 @@ using namespace helpers;
         p()->buffs.ritual_mother->extend_duration( p(), reduction );
         p()->buffs.ritual_pit_lord->extend_duration( p(), reduction );
       }
+
+      helpers::trigger_jackpot( p(), target );
     }
   };
 
@@ -4469,6 +4536,31 @@ using namespace helpers;
     valid = valid && p->get_target_data( tar )->dots_agony->is_ticking();
 
     return valid;
+  }
+
+  void helpers::trigger_jackpot( warlock_t* p, player_t* tar = nullptr )
+  {
+    if ( p->specialization() == WARLOCK_DESTRUCTION )
+    {
+      if ( p->tier.fiendtracer_destro_4pc->ok() )
+      {
+        p->buffs.destro_jackpot->trigger();
+      }
+
+      if ( p->tier.fiendtracer_destro_2pc->ok() )
+      {
+        p->buffs.demonfire_flurry->trigger();
+        if ( tar )
+          p->proc_actions.channel_demonfire_tick_set->target = tar;
+      }
+    }
+    else if (p->specialization() == WARLOCK_AFFLICTION)
+    {
+      if ( p->tier.fiendtracer_aff_2pc->ok() )
+      {
+        p->buffs.aff_jackpot->trigger();
+      }
+    }
   }
 
   void helpers::nightfall_updater( warlock_t* p, dot_t* d )
@@ -4796,7 +4888,12 @@ using namespace helpers;
   }
 
   void warlock_t::create_destruction_proc_actions()
-  { }
+  {
+    proc_actions.channel_demonfire_tick = new channel_demonfire_t::channel_demonfire_tick_t(
+        this, "Channel Demonfire (Proc)", talents.demonfire_infusion->effectN( 3 ).percent() + 1.0 );
+    proc_actions.channel_demonfire_tick_set = new channel_demonfire_t::channel_demonfire_tick_t(
+        this, "Channel Demonfire (Tier Set)", tier.fiendtracer_destro_cdf, tier.fiendtracer_destro_2pc->effectN(1).percent() );
+  }
 
   void warlock_t::create_diabolist_proc_actions()
   { }
@@ -4835,6 +4932,44 @@ using namespace helpers;
           if ( new_ == 1 ) cb->activate();
           else cb->deactivate();
         } );
+    }
+
+    if ( is_ptr() && sets->has_set_bonus( specialization(), TWW2, B2 ) )
+    {
+      struct tww2_2pc : public dbc_proc_callback_t
+      {
+        tww2_2pc( warlock_t* p, const special_effect_t& e ) : dbc_proc_callback_t( p, e )
+        {
+          allow_pet_procs = false;
+          initialize();
+          activate();
+        }
+
+        void execute( action_t*, action_state_t* s ) override
+        {
+          if ( s->target->is_sleeping() )
+            return;
+
+          double da = s->result_amount;
+          if ( da > 0 )
+          {
+            helpers::trigger_jackpot( debug_cast<warlock_t*>( listener ), s->target );
+          }
+        }
+      };
+
+      auto set_spell           = sets->set( specialization(), TWW2, B2 );
+      auto set_effect          = new special_effect_t( this );
+      set_effect->name_str     = util::tokenize_fn( set_spell->name_cstr() );
+      set_effect->type         = SPECIAL_EFFECT_EQUIP;
+      set_effect->proc_flags2_ = bugs ? PF2_ALL_HIT : PF2_ALL_HIT | PF2_PERIODIC_DAMAGE;
+      if ( !bugs )
+        set_effect->proc_flags_ = PF_MAGIC_SPELL | PF_PERIODIC;
+
+      set_effect->spell_id = set_spell->id();
+      special_effects.push_back( set_effect );
+
+      new tww2_2pc( this, *set_effect );
     }
   }
 

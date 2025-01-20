@@ -399,6 +399,7 @@ public:
     player_talent_t channel_demonfire;
     const spell_data_t* channel_demonfire_tick;
     const spell_data_t* channel_demonfire_travel; // Only holds travel speed
+    player_talent_t demonfire_infusion;
 
     player_talent_t blistering_atrophy;
     player_talent_t conflagration_of_chaos; // Conflagrate/Shadowburn has chance to make next cast of it a guaranteed crit TODO: Review behavior
@@ -567,6 +568,8 @@ public:
     action_t* demonic_soul;
     action_t* shared_fate;
     action_t* wicked_reaping;
+    action_t* channel_demonfire_tick;
+    action_t* channel_demonfire_tick_set;
   } proc_actions;
 
   struct tier_sets_t
@@ -575,6 +578,9 @@ public:
     const spell_data_t* hexflame_aff_2pc;
     const spell_data_t* hexflame_aff_4pc;
     const spell_data_t* umbral_lattice;
+    const spell_data_t* fiendtracer_aff_jackpot;
+    const spell_data_t* fiendtracer_aff_2pc;
+    const spell_data_t* fiendtracer_aff_4pc;
 
     // Demonology
     const spell_data_t* hexflame_demo_2pc;
@@ -585,6 +591,12 @@ public:
     const spell_data_t* hexflame_destro_2pc;
     const spell_data_t* hexflame_destro_4pc;
     const spell_data_t* echo_of_the_azjaqir;
+
+    const spell_data_t* fiendtracer_destro_2pc;
+    const spell_data_t* fiendtracer_destro_4pc;
+    const spell_data_t* fiendtracer_destro_jackpot;
+    const spell_data_t* fiendtracer_destro_demonfire_flurry;
+    const spell_data_t* fiendtracer_destro_cdf;
   } tier;
 
   // Cooldowns - Used for accessing cooldowns outside of their respective actions, such as reductions/resets
@@ -615,6 +627,7 @@ public:
     propagate_const<buff_t*> dark_harvest_haste; // One buff in game...
     propagate_const<buff_t*> dark_harvest_crit; // ...but split into two in simc for better handling
     propagate_const<buff_t*> umbral_lattice; // TWW1 4pc
+    propagate_const<buff_t*> aff_jackpot;
 
     // Demonology Buffs
     propagate_const<buff_t*> demonic_core;
@@ -644,6 +657,8 @@ public:
     propagate_const<buff_t*> decimation;
     propagate_const<buff_t*> summon_overfiend;
     propagate_const<buff_t*> echo_of_the_azjaqir;
+    propagate_const<buff_t*> demonfire_flurry;
+    propagate_const<buff_t*> destro_jackpot;
 
     // Diabolist Buffs
     propagate_const<buff_t*> ritual_overlord;
@@ -943,5 +958,6 @@ namespace helpers
 
   void trigger_blackened_soul( warlock_t* p, bool malevolence );
 
-}
+  void trigger_jackpot( warlock_t* p, player_t* tar );
+  }
 }  // namespace warlock

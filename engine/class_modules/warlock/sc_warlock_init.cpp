@@ -384,6 +384,7 @@ namespace warlock
     talents.channel_demonfire = find_talent_spell( talent_tree::SPECIALIZATION, "Channel Demonfire" ); // Should be ID 196447
     talents.channel_demonfire_tick = find_spell( 196448 ); // Includes both direct and splash damage values
     talents.channel_demonfire_travel = find_spell( 196449 );
+    talents.demonfire_infusion = find_talent_spell( talent_tree::SPECIALIZATION, "Demonfire Infusion" ); // Should be ID 196447
 
     talents.blistering_atrophy = find_talent_spell( talent_tree::SPECIALIZATION, "Blistering Atrophy" ); // Should be ID 456939
 
@@ -478,9 +479,19 @@ namespace warlock
     // Additional Tier Set spell data
 
     // Nerub-ar Palace
-    tier.hexflame_destro_2pc = sets->set( WARLOCK_DESTRUCTION, TWW1, B2 ); // Should be ID 453647
-    tier.hexflame_destro_4pc = sets->set( WARLOCK_DESTRUCTION, TWW1, B4 ); // Should be ID 453646
-    tier.echo_of_the_azjaqir = find_spell( 455674 );
+    tier.hexflame_destro_2pc                 = sets->set( WARLOCK_DESTRUCTION, TWW1, B2 );  // Should be ID 453647
+    tier.hexflame_destro_4pc                 = sets->set( WARLOCK_DESTRUCTION, TWW1, B4 );  // Should be ID 453646
+    tier.echo_of_the_azjaqir                 = find_spell( 455674 );
+
+    // TWWS2
+    tier.fiendtracer_aff_jackpot             = find_spell( 1219034 );
+    tier.fiendtracer_aff_2pc                 = sets->set( WARLOCK_AFFLICTION, TWW2, B2 );   // Should be ID 1215678
+    tier.fiendtracer_aff_4pc                 = sets->set( WARLOCK_AFFLICTION, TWW2, B4 );   // Should be ID 1215683
+    tier.fiendtracer_destro_2pc              = sets->set( WARLOCK_DESTRUCTION, TWW2, B2 );  // Should be ID 1215680
+    tier.fiendtracer_destro_4pc              = sets->set( WARLOCK_DESTRUCTION, TWW2, B4 );  // Should be ID 1215681
+    tier.fiendtracer_destro_jackpot          = find_spell( 1217798 );
+    tier.fiendtracer_destro_demonfire_flurry = find_spell( 1217731 );
+    tier.fiendtracer_destro_cdf              = find_spell( 1217787 );
 
     // Initialize some default values for pet spawners
     warlock_pet_list.infernals.set_default_duration( talents.summon_infernal_main->duration() );
@@ -777,6 +788,21 @@ namespace warlock
                                    { resource_gain( RESOURCE_SOUL_SHARD, talents.overfiend_buff->effectN( 1 ).base_value() / 10.0, gains.summon_overfiend ); } );
 
     buffs.echo_of_the_azjaqir = make_buff( this, "echo_of_the_azjaqir", tier.echo_of_the_azjaqir );
+
+    buffs.destro_jackpot = make_buff( this, "jackpot_destro", tier.fiendtracer_destro_jackpot )
+                               ->set_pct_buff_type( stat_pct_buff_type::STAT_PCT_BUFF_MASTERY )
+                               ->set_default_value_from_effect( 1 );
+
+    buffs.aff_jackpot = make_buff( this, "jackpot_aff", tier.fiendtracer_aff_jackpot )
+                               ->set_pct_buff_type( stat_pct_buff_type::STAT_PCT_BUFF_HASTE )
+                               ->set_default_value_from_effect( 1 );
+
+    buffs.demonfire_flurry = make_buff( this, "demonfire_flurry", tier.fiendtracer_destro_demonfire_flurry )
+                                 ->set_tick_callback( [ this ]( buff_t*, int, timespan_t ) {
+                                   proc_actions.channel_demonfire_tick_set->execute();
+                                 } )
+                                 ->apply_affecting_aura( talents.demonfire_mastery )
+                                 ->apply_affecting_aura( talents.raging_demonfire );
   }
 
   void warlock_t::create_buffs_diabolist()

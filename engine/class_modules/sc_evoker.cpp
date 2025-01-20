@@ -5873,10 +5873,8 @@ public:
   }
 
   void init() override
-
   {
-      evoker_augment_t::init();
-
+    evoker_augment_t::init();
   }
 
   void impact( action_state_t* s ) override
