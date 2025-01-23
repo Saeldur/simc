@@ -7388,24 +7388,49 @@ void best_in_slots( special_effect_t& effect )
       : stat_buff_t( e.player, name, s, item ), range_min( 0 ), range_max( 0 )
     {
       auto equip_driver = e.player->find_spell( 471063 );
-      auto mod          = equip_driver->effectN( 2 ).base_value() / 100;
+      auto mod          = equip_driver->effectN( 2 ).percent();
       range_min         = 1 - mod;
       range_max         = 1 + mod;
     }
 
     double randomize_stat_value()
     {
-      return default_value * rng().range( range_min, range_max );
-    }
-
-    void start( int s, double, timespan_t d ) override
-    {
-      stat_buff_t::start( s, randomize_stat_value(), d );
+      double val = default_value * rng().range( range_min, range_max );
+      for ( auto& buff_stat : stats )
+      {
+        double delta            = val - buff_stat.current_value;
+        buff_stat.current_value = val;
+        buff_stat.amount        = val;
+        if ( delta > 0 )
+        {
+          player->stat_gain( buff_stat.stat, delta, stat_gain, nullptr, buff_duration() > timespan_t::zero() );
+        }
+        else if ( delta < 0 )
+        {
+          player->stat_loss( buff_stat.stat, std::fabs( delta ), stat_gain, nullptr,
+                             buff_duration() > timespan_t::zero() );
+        }
+      }
+      return val;
     }
 
     void bump( int stacks, double ) override
     {
       buff_t::bump( stacks, randomize_stat_value() );
+    }
+
+    void expire_override( int s, timespan_t d ) override
+    {
+      for ( auto& buff_stat : stats )
+      {
+        player->stat_loss( buff_stat.stat, buff_stat.current_value, stat_gain, nullptr,
+                           buff_duration() > timespan_t::zero() );
+
+        buff_stat.current_value = 0;
+      }
+
+      // Purposely skip over stat_buff_t::expire_override() as we do the lost stat calculations manually
+      buff_t::expire_override( s, d );
     }
   };
 
@@ -7413,10 +7438,10 @@ void best_in_slots( special_effect_t& effect )
   {
     std::unordered_map<stat_e, buff_t*> buffs;
 
-    best_in_slots_cb_t( const special_effect_t& equip, const special_effect_t& use, const spell_data_t* equip_driver )
+    best_in_slots_cb_t( const special_effect_t& equip, const special_effect_t& use )
       : dbc_proc_callback_t( equip.player, equip ), buffs()
     {
-      auto buff_value      = equip_driver->effectN( 1 ).average( use );
+      auto buff_value      = equip.driver()->effectN( 1 ).average( use );
       auto proc_buff_spell = equip.player->find_spell( 473492 );
 
       create_all_stat_buffs<best_in_slots_stat_buff_t>( equip, proc_buff_spell, buff_value,
@@ -7442,33 +7467,35 @@ void best_in_slots( special_effect_t& effect )
   equip->spell_id = equip_driver->id();
   effect.player->special_effects.push_back( equip );
 
-  auto cb = new best_in_slots_cb_t( *equip, effect, equip_driver );
+  auto cb = new best_in_slots_cb_t( *equip, effect );
   cb->initialize();
   cb->activate();
 
-  struct cheating_t : public generic_proc_t
+  struct cheating_t : public spell_t
   {
     std::unordered_map<stat_e, buff_t*> buffs;
 
     cheating_t( const special_effect_t& e, const spell_data_t* equip_driver )
-      : generic_proc_t( e, "cheating", e.driver() ), buffs()
+      : spell_t( "cheating", e.player, e.driver() ), buffs()
     {
-      auto value_mod  = 1 + ( equip_driver->effectN( 2 ).base_value() / 100 );
+      auto value_mod  = 1 + equip_driver->effectN( 2 ).percent();
       auto buff_value = equip_driver->effectN( 1 ).average( e ) * value_mod;
 
       create_all_stat_buffs( e, e.driver(), buff_value, [ &, buff_value ]( stat_e s, buff_t* b ) {
         b->default_value = buff_value;
         buffs[ s ]       = b;
+        b->cooldown->duration = 0_ms; // Handled by the action
       } );
     }
 
     void execute() override
     {
-      generic_proc_t::execute();
+      spell_t::execute();
       buffs.at( util::highest_stat( player, secondary_ratings ) )->trigger();
     }
   };
 
+  effect.disable_buff();
   effect.spell_id       = 473402;
   effect.execute_action = create_proc_action<cheating_t>( "cheating", effect, equip_driver );
 }
