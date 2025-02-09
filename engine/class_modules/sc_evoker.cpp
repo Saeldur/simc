@@ -1283,7 +1283,7 @@ struct evoker_t : public player_t
     propagate_const<proc_t*> destroyers_scarred_wards;
     propagate_const<proc_t*> rockfall;
     propagate_const<proc_t*> tww2_4pc;
-    
+    propagate_const<proc_t*> hoarded_power;
   } proc;
 
   // RPPMs
@@ -2148,8 +2148,12 @@ struct essence_base_t : public BASE
       {
         BASE::p()->buff.momentum_shift->trigger();
       }
-      if ( !BASE::rng().roll( hoarded_pct ) )
-        BASE::p()->buff.essence_burst->decrement();
+      BASE::p()->buff.essence_burst->decrement();
+      if ( BASE::rng().roll( hoarded_pct ) )
+      {
+        BASE::p()->buff.essence_burst->trigger();
+        BASE::p()->proc.hoarded_power->occur();
+      }
     }
   }
 
@@ -3036,7 +3040,7 @@ public:
   {
     ab::execute();
 
-    if ( !ab::background && !ab::dual )
+    if ( ( !ab::background || ab::not_a_proc && ab::id != 359077 ) && !ab::dual )
     {
       // These happen after any secondary spells are executed, so we schedule as events
       if ( spell_color == SPELL_BLUE )
@@ -3805,6 +3809,10 @@ struct fire_breath_t : public empowered_charge_spell_t
 
       dot_duration = 20_s;  // base * 10? or hardcoded to 20s?
       dot_duration += timespan_t::from_seconds( p->talent.blast_furnace->effectN( 1 ).base_value() );
+      
+      apply_affecting_aura( p->talent.flameshaper.fulminous_roar );
+
+      dot_dur_per_emp *= 1 + p->talent.flameshaper.fulminous_roar->effectN( 2 ).percent();
 
       if ( p->talent.chronowarden.afterimage.enabled() )
       {
@@ -4257,7 +4265,7 @@ struct disintegrate_t : public essence_spell_t
     : essence_spell_t( "disintegrate", p,
                        p->talent.eruption.ok() ? spell_data_t::not_found() : p->find_class_spell( "Disintegrate" ),
                        options_str ),
-      num_ticks( as<int>( dot_duration / base_tick_time ) + 1 + p->talent.azure_celerity->effectN( 3 ).base_value() ),
+      num_ticks( as<int>( dot_duration / base_tick_time + 1 + p->talent.azure_celerity->effectN( 3 ).base_value() ) ),
       mass_disint_mult( p->talent.scalecommander.mass_disintegrate->effectN( 2 ).percent() ),
       current_dots()
   {
@@ -4966,16 +4974,22 @@ struct quell_t : public evoker_spell_t
 
 struct shattering_star_t : public evoker_spell_t
 {
-  shattering_star_t( evoker_t* p, std::string_view name, bool tier_set_proc, std::string_view options_str = {} )
-    : evoker_spell_t( name, p, p->talent.shattering_star, options_str )
+  size_t tier_set_proc;
+  shattering_star_t( evoker_t* p, std::string_view name, size_t tier_set_proc, std::string_view options_str = {} )
+    : evoker_spell_t( name, p, p->talent.shattering_star, options_str ), tier_set_proc( tier_set_proc )
   {
-    aoe = as<int>( data().effectN( 1 ).base_value() * ( 1 + p->talent.eternitys_span->effectN( 2 ).percent() ) );
+    aoe = as<int>( data().effectN( 1 ).base_value() );
     if ( tier_set_proc )
     {
       aoe += as<int>( p->sets->set( EVOKER_DEVASTATION, TWW2, B2 )->effectN( 2 ).base_value() -
                       data().effectN( 1 ).base_value() );
       base_multiplier *= p->sets->set( EVOKER_DEVASTATION, TWW2, B2 )->effectN( 1 ).percent();
+      
+      not_a_proc = true;
     }
+
+    aoe = as<int>( aoe * ( 1 + p->talent.eternitys_span->effectN( 2 ).percent() ) );
+
     aoe = ( aoe == 1 ) ? 0 : aoe;
   }
 
@@ -4988,7 +5002,7 @@ struct shattering_star_t : public evoker_spell_t
   {
     evoker_spell_t::execute();
 
-    if ( p()->talent.arcane_vigor.ok() && !background )
+    if ( p()->talent.arcane_vigor.ok() && ( !background || tier_set_proc >= 2 ) )
     {
       p()->buff.essence_burst->trigger();
     }
@@ -5271,7 +5285,7 @@ struct dragonrage_t : public evoker_spell_t
     if ( p->is_ptr() && p->sets->has_set_bonus( EVOKER_DEVASTATION, TWW2, B2 ) )
     {
       shattering_star = p->get_secondary_action<spells::shattering_star_t>( "shattering_star_2pc_dragonrage", "shattering_star_2pc_dragonrage",
-                                                                         true );
+                                                                         1 );
       add_child( shattering_star );
     }
   }
@@ -5588,6 +5602,7 @@ struct upheaval_t : public empowered_charge_spell_t
         base_dd_multiplier *= p->sets->set( EVOKER_AUGMENTATION, TWW2, B2 )->effectN( 1 ).percent();
         sands           = nullptr;
         threads_of_fate = nullptr;
+        extend_ebon     = 0_s;
       }
 
       if ( is_tierset && !is_rumbling_earth )
@@ -8118,6 +8133,7 @@ void evoker_t::init_procs()
   proc.destroyers_scarred_wards              = get_proc( "Evoker Devastation 11.0 Class Set 4pc" );
   proc.rockfall                              = get_proc( "Rockfall" );
   proc.tww2_4pc                              = get_proc( "Essence Bursts from TWW Season 2 4pc" );
+  proc.hoarded_power                         = get_proc( "Hoarded Power" );
 }
 
 void evoker_t::init_base_stats()
@@ -8499,7 +8515,6 @@ void evoker_t::init_special_effects()
     auto set_effect          = new special_effect_t( this );
     set_effect->name_str     = util::tokenize_fn( set_spell->name_cstr() );
     set_effect->type         = SPECIAL_EFFECT_EQUIP;
-    set_effect->proc_flags2_ = PF2_ALL_HIT;
     set_effect->spell_id     = set_spell->id();
     special_effects.push_back( set_effect );
 
@@ -8521,7 +8536,7 @@ void evoker_t::init_special_effects()
         activate();
 
         damage_spell =
-            p->get_secondary_action<spells::shattering_star_t>( "shattering_star_2pc", "shattering_star_2pc", true );
+            p->get_secondary_action<spells::shattering_star_t>( "shattering_star_2pc", "shattering_star_2pc", 2 );
       }
 
       void execute( action_t*, action_state_t* s ) override
@@ -8545,7 +8560,6 @@ void evoker_t::init_special_effects()
     auto set_effect          = new special_effect_t( this );
     set_effect->name_str     = util::tokenize_fn( set_spell->name_cstr() );
     set_effect->type         = SPECIAL_EFFECT_EQUIP;
-    set_effect->proc_flags2_ = PF2_ALL_HIT;
     set_effect->spell_id     = set_spell->id();
     special_effects.push_back( set_effect );
 
@@ -9128,7 +9142,6 @@ void evoker_t::apply_affecting_auras_late( action_t& action )
   // Flameshaper
   action.apply_affecting_aura( talent.flameshaper.red_hot );
   action.apply_affecting_aura( talent.flameshaper.expanded_lungs );
-  action.apply_affecting_aura( talent.flameshaper.fulminous_roar );
 
   // Scalecommander
   action.apply_affecting_aura( talent.scalecommander.might_of_the_black_dragonflight );
@@ -9525,6 +9538,9 @@ double evoker_t::get_molten_embers_multiplier( player_t* target, bool recalculat
     auto firebreath_duration = 20_s + timespan_t::from_seconds( talent.blast_furnace->effectN( 1 ).base_value() ) - ( static_cast<int>( empower ) - 1 ) * 6_s;
 
     mul *= 1 + 2.4_s / firebreath_duration;
+
+    if ( is_ptr() )
+      mul = std::min( 1.4, mul );
 
     sim->print_debug( "{} set molten_embers_multiplier on {} to {} from {}", this->name_str, target->name_str, mul,
                       td->molten_embers_multiplier );

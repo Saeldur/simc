@@ -326,7 +326,6 @@ public:
     // Arcane
     buff_t* aether_attunement;
     buff_t* aether_attunement_counter;
-    buff_t* aethervision;
     buff_t* arcane_charge;
     buff_t* arcane_familiar;
     buff_t* arcane_harmony;
@@ -335,11 +334,11 @@ public:
     buff_t* big_brained;
     buff_t* clearcasting;
     buff_t* clearcasting_channel; // Hidden buff which governs tick and channel time
-    buff_t* concentration;
     buff_t* enlightened;
     buff_t* evocation;
     buff_t* high_voltage;
     buff_t* impetus;
+    buff_t* intuition;
     buff_t* leydrinker;
     buff_t* nether_precision;
     buff_t* presence_of_mind;
@@ -406,6 +405,7 @@ public:
 
     // Sunfury
     buff_t* arcane_soul;
+    buff_t* arcane_soul_damage;
     buff_t* burden_of_power;
     buff_t* glorious_incandescence;
     buff_t* lingering_embers;
@@ -423,7 +423,6 @@ public:
 
     // Set Bonuses
     buff_t* clarity;
-    buff_t* intuition;
 
     buff_t* blessing_of_the_phoenix;
     buff_t* rollin_hot;
@@ -440,6 +439,7 @@ public:
     cooldown_t* comet_storm;
     cooldown_t* cone_of_cold;
     cooldown_t* dragons_breath;
+    cooldown_t* excess_fire;
     cooldown_t* excess_frost;
     cooldown_t* fire_blast;
     cooldown_t* flurry;
@@ -472,7 +472,6 @@ public:
     unsigned initial_spellfire_spheres = 5;
     arcane_phoenix_rotation arcane_phoenix_rotation_override = arcane_phoenix_rotation::DEFAULT;
     bool ice_nova_consumes_winters_chill = true;
-    bool consume_wintertide = true;
   } options;
 
   // Pets
@@ -671,13 +670,13 @@ public:
     player_talent_t charged_orb;
     player_talent_t arcane_tempo;
     player_talent_t concentrated_power;
-    player_talent_t aethervision;
     player_talent_t arcing_cleave;
 
     // Row 4
     player_talent_t arcane_familiar;
     player_talent_t arcane_surge;
     player_talent_t improved_clearcasting;
+    player_talent_t intuition;
 
     // Row 5
     player_talent_t big_brained;
@@ -714,7 +713,7 @@ public:
     player_talent_t arcane_bombardment;
     player_talent_t leysight;
     player_talent_t aether_fragment;
-    player_talent_t concentration;
+    player_talent_t arcane_rebound;
 
     // Row 10
     player_talent_t high_voltage;
@@ -1491,6 +1490,8 @@ struct arcane_surge_t final : public arcane_phoenix_spell_t
   {
     reduced_aoe_targets = data().effectN( 3 ).base_value(); // TODO: Verify this
     is_mage_spell = true;
+    // TODO: Check this; also see the player arcane_surge_t
+    base_multiplier *= 1.0 + o()->sets->set( MAGE_ARCANE, TWW1, B4 )->effectN( 1 ).percent();
   }
 
   double composite_da_multiplier( const action_state_t* s ) const override
@@ -2252,6 +2253,10 @@ public:
 
     if ( triggers.frostfire_mastery && harmful && !background )
       trigger_frostfire_mastery();
+
+    // Needs to be triggered with a delay so that ABar doesn't eat its own proc
+    if ( !background && harmful && rng().roll( p()->talents.intuition->effectN( 1 ).percent() ) )
+      make_event( *sim, [ this ] { p()->buffs.intuition->trigger(); } );
   }
 
   void impact( action_state_t* s ) override
@@ -2534,6 +2539,14 @@ struct arcane_mage_spell_t : public mage_spell_t
           // and the Attunement buff is applied with a delay. Here, we just use
           // max stacks of the buff to track the delay.
           p()->buffs.aether_attunement_counter->trigger();
+
+          if ( rng().roll( p()->talents.leydrinker->effectN( 1 ).percent() ) )
+          {
+            if ( p()->buffs.leydrinker->check() )
+              make_event( *sim, 150_ms, [ this ] { p()->buffs.leydrinker->trigger(); } );
+            else
+              p()->buffs.leydrinker->trigger();
+          }
         }
         break;
       }
@@ -2600,27 +2613,14 @@ struct arcane_mage_spell_t : public mage_spell_t
     }
   }
 
-  // TODO 11.1: Second parameter is no longer necessary, remove later
-  void consume_nether_precision( player_t* t, bool aethervision = false )
+  void consume_nether_precision( player_t* t )
   {
     int old_stack = p()->buffs.nether_precision->check();
     if ( !old_stack )
       return;
 
     p()->buffs.nether_precision->decrement();
-
-    if ( rng().roll( p()->talents.leydrinker->effectN( 1 ).percent() ) )
-    {
-      if ( p()->buffs.leydrinker->check() )
-        make_event( *sim, 150_ms, [ this ] { p()->buffs.leydrinker->trigger(); } );
-      else
-        p()->buffs.leydrinker->trigger();
-    }
-
     p()->trigger_splinter( t );
-
-    if ( aethervision )
-      p()->buffs.aethervision->trigger();
   }
 };
 
@@ -3261,15 +3261,13 @@ struct icicle_t final : public frost_mage_spell_t
       return;
 
     p()->trigger_fof( p()->talents.flash_freeze->effectN( 1 ).percent(), p()->procs.fingers_of_frost_flash_freeze );
-    if ( p()->options.consume_wintertide )
-      p()->buffs.wintertide->expire();
   }
 
   double action_multiplier() const override
   {
     double am = frost_mage_spell_t::action_multiplier();
 
-    am *= p()->buffs.wintertide->check_stack_value();
+    am *= 1.0 + p()->buffs.wintertide->check_stack_value();
 
     return am;
   }
@@ -3441,12 +3439,22 @@ struct arcane_orb_t final : public arcane_mage_spell_t
   }
 };
 
-// TODO 11.1: Still triggers demat as long as NP is up, despite no longer interacting with it
+// TODO 11.1: Not a mage spell and thus not affected by a lot of mage stuff
+struct arcane_rebound_t final : public spell_t
+{
+  arcane_rebound_t( std::string_view n, mage_t* p ) :
+    spell_t( n, p, p->find_spell( 1223801 ) )
+  {
+    background = proc = true;
+    aoe = -1;
+  }
+};
+
 struct arcane_barrage_t final : public dematerialize_spell_t
 {
   action_t* orb_barrage = nullptr;
+  action_t* rebound = nullptr;
   int snapshot_charges = -1;
-  int aethervision_charges = 0;
   int glorious_incandescence_charges = 0;
   int arcane_soul_charges = 0;
   int intuition_charges = 0;
@@ -3455,19 +3463,24 @@ struct arcane_barrage_t final : public dematerialize_spell_t
     dematerialize_spell_t( n, p, p->find_specialization_spell( "Arcane Barrage" ) )
   {
     parse_options( options_str );
-    base_aoe_multiplier *= data().effectN( 2 ).percent();
+    base_aoe_multiplier *= p->talents.arcing_cleave->effectN( 2 ).percent();
     affected_by.arcane_debilitation = true;
     triggers.clearcasting = true;
     base_multiplier *= 1.0 + p->sets->set( MAGE_ARCANE, TWW1, B2 )->effectN( 1 ).percent();
-    aethervision_charges = as<int>( p->find_spell( 467636 )->effectN( 1 ).base_value() );
     glorious_incandescence_charges = as<int>( p->find_spell( 451223 )->effectN( 1 ).base_value() );
     arcane_soul_charges = as<int>( p->find_spell( 453413 )->effectN( 1 ).base_value() );
-    intuition_charges = as<int>( p->find_spell( 455683 )->effectN( 1 ).base_value() );
+    intuition_charges = as<int>( p->find_spell( 1223799 )->effectN( 1 ).base_value() );
 
     if ( p->talents.orb_barrage.ok() )
     {
       orb_barrage = get_action<arcane_orb_t>( "orb_barrage_arcane_orb", p, "", ao_type::ORB_BARRAGE );
       add_child( orb_barrage );
+    }
+
+    if ( p->talents.arcane_rebound.ok() )
+    {
+      rebound = get_action<arcane_rebound_t>( "arcane_rebound", p );
+      add_child( rebound );
     }
   }
 
@@ -3501,8 +3514,10 @@ struct arcane_barrage_t final : public dematerialize_spell_t
     {
       p()->trigger_clearcasting( 1.0, 0_ms );
       p()->trigger_arcane_charge( arcane_soul_charges );
+      p()->buffs.arcane_soul_damage->trigger();
     }
 
+    consume_nether_precision( target );
     p()->trigger_spellfire_spheres();
     p()->trigger_mana_cascade();
 
@@ -3512,21 +3527,16 @@ struct arcane_barrage_t final : public dematerialize_spell_t
       p()->trigger_arcane_charge( glorious_incandescence_charges );
       p()->state.trigger_glorious_incandescence = true;
     }
+    p()->consume_burden_of_power();
 
     if ( p()->buffs.intuition->check() )
     {
       p()->buffs.intuition->decrement();
       p()->trigger_arcane_charge( intuition_charges );
     }
-    p()->buffs.intuition->trigger();
 
-    if ( int av_stack = p()->buffs.aethervision->check() )
-    {
-      if ( p()->buffs.aethervision->at_max_stacks() )
-        p()->trigger_splinter( target );
-      p()->buffs.aethervision->expire();
-      p()->trigger_arcane_charge( av_stack * aethervision_charges );
-    }
+    if ( rebound && num_targets_hit > as<int>( p()->talents.arcane_rebound->effectN( 1 ).base_value() ) )
+      rebound->execute_on_target( target );
 
     snapshot_charges = -1;
   }
@@ -3535,10 +3545,14 @@ struct arcane_barrage_t final : public dematerialize_spell_t
   {
     double m = dematerialize_spell_t::composite_da_multiplier( s );
 
-    m *= 1.0 + s->n_targets * p()->talents.resonance->effectN( 1 ).percent();
+    if ( s->n_targets > 1 )
+      m *= 1.0 + ( s->n_targets - 1 ) * p()->talents.resonance->effectN( 1 ).percent();
 
     if ( s->target->health_percentage() <= p()->talents.arcane_bombardment->effectN( 1 ).base_value() )
       m *= 1.0 + p()->talents.arcane_bombardment->effectN( 2 ).percent() + p()->talents.sunfury_execution->effectN( 1 ).percent();
+
+    if ( p()->buffs.burden_of_power->check() )
+      m *= 1.0 + p()->buffs.burden_of_power->data().effectN( 4 ).percent();
 
     if ( p()->buffs.glorious_incandescence->check() )
       m *= 1.0 + p()->buffs.glorious_incandescence->data().effectN( 2 ).percent();
@@ -3551,9 +3565,10 @@ struct arcane_barrage_t final : public dematerialize_spell_t
     double am = dematerialize_spell_t::action_multiplier();
 
     am *= arcane_charge_multiplier( true );
-    am *= 1.0 + p()->buffs.aethervision->check_stack_value();
     am *= 1.0 + p()->buffs.arcane_harmony->check_stack_value();
+    am *= 1.0 + p()->buffs.nether_precision->check_value();
     am *= 1.0 + p()->buffs.intuition->check_value();
+    am *= 1.0 + p()->buffs.arcane_soul_damage->check_stack_value();
 
     return am;
   }
@@ -3577,7 +3592,6 @@ struct arcane_blast_t final : public dematerialize_spell_t
     base_multiplier *= 1.0 + p->talents.consortiums_bauble->effectN( 2 ).percent();
     base_multiplier *= 1.0 + p->sets->set( MAGE_ARCANE, TWW1, B2 )->effectN( 1 ).percent();
     base_costs[ RESOURCE_MANA ] *= 1.0 + p->talents.consortiums_bauble->effectN( 1 ).percent();
-    cost_reductions = { p->buffs.concentration };
   }
 
   timespan_t travel_time() const override
@@ -3619,9 +3633,7 @@ struct arcane_blast_t final : public dematerialize_spell_t
     if ( p()->buffs.presence_of_mind->up() )
       p()->buffs.presence_of_mind->decrement();
 
-    p()->buffs.concentration->trigger();
-    consume_nether_precision( target, true );
-    p()->buffs.intuition->trigger();
+    consume_nether_precision( target );
   }
 
   double action_multiplier() const override
@@ -3815,6 +3827,7 @@ struct arcane_missiles_tick_t final : public custom_state_spell_t<arcane_mage_sp
     background = proc = true;
     affected_by.savant = affected_by.arcane_debilitation = true;
     base_multiplier *= 1.0 + p->talents.eureka->effectN( 1 ).percent();
+    base_multiplier *= 1.0 + p->sets->set( MAGE_ARCANE, TWW1, B4 )->effectN( 1 ).percent();
 
     const auto& aa = p->buffs.aether_attunement->data();
     base_aoe_multiplier *= ( 1.0 + aa.effectN( 4 ).percent() ) / ( 1.0 + aa.effectN( 1 ).percent() );
@@ -4037,6 +4050,8 @@ struct arcane_surge_t final : public arcane_mage_spell_t
     aoe = -1;
     affected_by.savant = true;
     reduced_aoe_targets = data().effectN( 3 ).base_value();
+    // TODO 11.1: Applies to Arcane Surge instead of Arcane Orb
+    base_multiplier *= 1.0 + p->sets->set( MAGE_ARCANE, TWW1, B4 )->effectN( 1 ).percent();
   }
 
   timespan_t travel_time() const override
@@ -5383,9 +5398,6 @@ struct glacial_spike_t final : public frost_mage_spell_t
 
     if ( consumed_wc )
       p()->trigger_splinter( s->target, as<int>( p()->talents.signature_spell->effectN( 2 ).base_value() ) );
-
-    if ( p()->options.consume_wintertide )
-      p()->buffs.wintertide->expire();
   }
 };
 
@@ -5576,11 +5588,12 @@ struct ice_lance_t final : public custom_state_spell_t<frost_mage_spell_t, ice_l
     if ( !primary )
       record_shatter_source( s, cleave_source );
 
-    if ( p()->buffs.excess_fire->check() )
+    if ( p()->buffs.excess_fire->check() && p()->cooldowns.excess_fire->up() )
     {
       p()->action.frostfire_burst->execute_on_target( s->target );
       p()->buffs.excess_fire->decrement();
       p()->buffs.excess_frost->trigger();
+      p()->cooldowns.excess_fire->start( p()->buffs.excess_fire->data().internal_cooldown() );
     }
 
     if ( frozen & FF_FINGERS_OF_FROST && frigid_pulse )
@@ -5765,11 +5778,12 @@ struct fire_blast_t final : public fire_mage_spell_t
     // As of 11.1, only triggers from Fire Blasts cast by Fire Mages.
     if ( result_is_hit( s->result ) && s->chain_target == 0 && p()->specialization() == MAGE_FIRE )
     {
-      if ( p()->buffs.excess_fire->check() )
+      if ( p()->buffs.excess_fire->check() && p()->cooldowns.excess_fire->up() )
       {
         p()->action.frostfire_burst->execute_on_target( s->target );
         p()->buffs.excess_fire->decrement();
         p()->buffs.excess_frost->trigger();
+        p()->cooldowns.excess_fire->start( p()->buffs.excess_fire->data().internal_cooldown() );
       }
 
       trigger_glorious_incandescence( s->target );
@@ -7606,22 +7620,23 @@ mage_t::mage_t( sim_t* sim, std::string_view name, race_e r ) :
   talents()
 {
   // Cooldowns
-  cooldowns.arcane_echo        = get_cooldown( "arcane_echo_icd"    );
-  cooldowns.blast_wave         = get_cooldown( "blast_wave"         );
-  cooldowns.combustion         = get_cooldown( "combustion"         );
-  cooldowns.comet_storm        = get_cooldown( "comet_storm"        );
-  cooldowns.cone_of_cold       = get_cooldown( "cone_of_cold"       );
-  cooldowns.excess_frost       = get_cooldown( "excess_frost_icd"   );
-  cooldowns.dragons_breath     = get_cooldown( "dragons_breath"     );
-  cooldowns.fire_blast         = get_cooldown( "fire_blast"         );
-  cooldowns.flurry             = get_cooldown( "flurry"             );
-  cooldowns.from_the_ashes     = get_cooldown( "from_the_ashes"     );
-  cooldowns.frost_nova         = get_cooldown( "frost_nova"         );
-  cooldowns.frozen_orb         = get_cooldown( "frozen_orb"         );
-  cooldowns.meteor             = get_cooldown( "meteor"             );
-  cooldowns.phoenix_flames     = get_cooldown( "phoenix_flames"     );
-  cooldowns.presence_of_mind   = get_cooldown( "presence_of_mind"   );
-  cooldowns.pyromaniac         = get_cooldown( "pyromaniac"         );
+  cooldowns.arcane_echo        = get_cooldown( "arcane_echo_icd"  );
+  cooldowns.blast_wave         = get_cooldown( "blast_wave"       );
+  cooldowns.combustion         = get_cooldown( "combustion"       );
+  cooldowns.comet_storm        = get_cooldown( "comet_storm"      );
+  cooldowns.cone_of_cold       = get_cooldown( "cone_of_cold"     );
+  cooldowns.excess_fire        = get_cooldown( "excess_fire_icd"  );
+  cooldowns.excess_frost       = get_cooldown( "excess_frost_icd" );
+  cooldowns.dragons_breath     = get_cooldown( "dragons_breath"   );
+  cooldowns.fire_blast         = get_cooldown( "fire_blast"       );
+  cooldowns.flurry             = get_cooldown( "flurry"           );
+  cooldowns.from_the_ashes     = get_cooldown( "from_the_ashes"   );
+  cooldowns.frost_nova         = get_cooldown( "frost_nova"       );
+  cooldowns.frozen_orb         = get_cooldown( "frozen_orb"       );
+  cooldowns.meteor             = get_cooldown( "meteor"           );
+  cooldowns.phoenix_flames     = get_cooldown( "phoenix_flames"   );
+  cooldowns.presence_of_mind   = get_cooldown( "presence_of_mind" );
+  cooldowns.pyromaniac         = get_cooldown( "pyromaniac"       );
 
   // Options
   resource_regeneration = regen_type::DYNAMIC;
@@ -7828,7 +7843,6 @@ void mage_t::create_options()
                 return true;
               } ) );
   add_option( opt_bool( "mage.ice_nova_consumes_winters_chill", options.ice_nova_consumes_winters_chill ) );
-  add_option( opt_bool( "mage.consume_wintertide", options.consume_wintertide ) );
 
   player_t::create_options();
 }
@@ -8033,12 +8047,12 @@ void mage_t::init_spells()
   talents.charged_orb                = find_talent_spell( talent_tree::SPECIALIZATION, "Charged Orb"                );
   talents.arcane_tempo               = find_talent_spell( talent_tree::SPECIALIZATION, "Arcane Tempo"               );
   talents.concentrated_power         = find_talent_spell( talent_tree::SPECIALIZATION, "Concentrated Power"         );
-  talents.aethervision               = find_talent_spell( talent_tree::SPECIALIZATION, "Aethervision"               );
   talents.arcing_cleave              = find_talent_spell( talent_tree::SPECIALIZATION, "Arcing Cleave"              );
   // Row 4
   talents.arcane_familiar            = find_talent_spell( talent_tree::SPECIALIZATION, "Arcane Familiar"            );
   talents.arcane_surge               = find_talent_spell( talent_tree::SPECIALIZATION, "Arcane Surge"               );
   talents.improved_clearcasting      = find_talent_spell( talent_tree::SPECIALIZATION, "Improved Clearcasting"      );
+  talents.intuition                  = find_talent_spell( talent_tree::SPECIALIZATION, "Intuition"                  );
   // Row 5
   talents.big_brained                = find_talent_spell( talent_tree::SPECIALIZATION, "Big Brained"                );
   talents.energized_familiar         = find_talent_spell( talent_tree::SPECIALIZATION, "Energized Familiar"         );
@@ -8070,7 +8084,7 @@ void mage_t::init_spells()
   talents.arcane_bombardment         = find_talent_spell( talent_tree::SPECIALIZATION, "Arcane Bombardment"         );
   talents.leysight                   = find_talent_spell( talent_tree::SPECIALIZATION, "Leysight"                   );
   talents.aether_fragment            = find_talent_spell( talent_tree::SPECIALIZATION, "Aether Fragment"            );
-  talents.concentration              = find_talent_spell( talent_tree::SPECIALIZATION, "Concentration"              );
+  talents.arcane_rebound             = find_talent_spell( talent_tree::SPECIALIZATION, "Arcane Rebound"             );
   // Row 10
   talents.high_voltage               = find_talent_spell( talent_tree::SPECIALIZATION, "High Voltage"               );
   talents.arcane_harmony             = find_talent_spell( talent_tree::SPECIALIZATION, "Arcane Harmony"             );
@@ -8330,10 +8344,6 @@ void mage_t::create_buffs()
                                       ->set_default_value_from_effect( 1 );
   buffs.aether_attunement_counter = make_buff( this, "aether_attunement_counter", find_spell( 458388 ) )
                                       ->set_chance( talents.aether_attunement.ok() );
-  buffs.aethervision              = make_buff( this, "aethervision", find_spell( 467634 ) )
-                                      ->set_default_value_from_effect( 1 )
-                                      ->modify_default_value( talents.aether_fragment->effectN( 1 ).percent() )
-                                      ->set_chance( talents.aethervision.ok() );
   buffs.arcane_charge             = make_buff( this, "arcane_charge", find_spell( 36032 ) )
                                       ->set_constant_behavior( buff_constant_behavior::NEVER_CONSTANT );
   buffs.arcane_familiar           = make_buff( this, "arcane_familiar", find_spell( 210126 ) )
@@ -8375,10 +8385,6 @@ void mage_t::create_buffs()
                                       ->set_chance( spec.clearcasting->ok() ) ;
   buffs.clearcasting_channel      = make_buff( this, "clearcasting_channel", find_spell( 277726 ) )
                                       ->set_quiet( true );
-  buffs.concentration             = make_buff( this, "concentration", find_spell( 384379 ) )
-                                      ->set_default_value_from_effect( 1 )
-                                      ->set_activated( false )
-                                      ->set_trigger_spell( talents.concentration );
   buffs.enlightened               = make_buff( this, "enlightened", find_spell( 1217242 ) )
                                       ->set_schools_from_effect( 4 )
                                       ->add_invalidate( CACHE_PLAYER_DAMAGE_MULTIPLIER )
@@ -8396,6 +8402,10 @@ void mage_t::create_buffs()
   buffs.impetus                   = make_buff( this, "impetus", find_spell( 393939 ) )
                                       ->set_default_value_from_effect( 1 )
                                       ->add_invalidate( CACHE_PLAYER_DAMAGE_MULTIPLIER );
+  buffs.intuition                 = make_buff( this, "intuition", find_spell( 1223797 ) )
+                                      ->set_default_value_from_effect( 1 )
+                                      ->modify_default_value( talents.aether_fragment->effectN( 1 ).percent() )
+                                      ->set_chance( talents.intuition.ok() );
   buffs.leydrinker                = make_buff( this, "leydrinker", find_spell( 453758 ) )
                                       ->set_chance( talents.leydrinker.ok() );
   buffs.nether_precision          = make_buff( this, "nether_precision", find_spell( 383783 ) )
@@ -8509,11 +8519,13 @@ void mage_t::create_buffs()
                                ->set_chance( talents.slick_ice.ok() );
   buffs.wintertide         = make_buff( this, "wintertide", find_spell( 1222865 ) )
                                ->set_default_value_from_effect( 1 )
+                               ->modify_default_value( talents.wintertide->effectN( 1 ).percent() )
                                ->set_chance( talents.wintertide.ok() );
 
 
   // Frostfire
   buffs.excess_fire           = make_buff( this, "excess_fire", find_spell( 438624 ) )
+                                  ->set_cooldown( 0_ms )
                                   ->set_chance( talents.excess_fire.ok() );
   buffs.excess_frost          = make_buff( this, "excess_frost", find_spell( 438611 ) )
                                   ->set_cooldown( 0_ms )
@@ -8546,7 +8558,10 @@ void mage_t::create_buffs()
 
   // Sunfury
   buffs.arcane_soul            = make_buff( this, "arcane_soul", find_spell( 451038 ) )
+                                   ->set_stack_change_callback( [ this ] ( buff_t*, int, int ) { buffs.arcane_soul_damage->expire(); } )
                                    ->set_chance( specialization() == MAGE_ARCANE && talents.memory_of_alar.ok() );
+  buffs.arcane_soul_damage     = make_buff( this, "arcane_soul_damage", find_spell( 1223522 ) )
+                                   ->set_default_value_from_effect( 1 );
   buffs.burden_of_power        = make_buff( this, "burden_of_power", find_spell( 451049 ) )
                                    ->set_chance( talents.burden_of_power.ok() );
   buffs.glorious_incandescence = make_buff( this, "glorious_incandescence", find_spell( 451073 ) )
@@ -8591,12 +8606,9 @@ void mage_t::create_buffs()
 
 
   // Set Bonuses
-  buffs.intuition = make_buff( this, "intuition", find_spell( 455681 ) )
-                      ->set_default_value_from_effect( 1 )
-                      ->set_chance( sets->set( MAGE_ARCANE, TWW1, B4 )->effectN( 1 ).percent() );
-  buffs.clarity   = make_buff( this, "clarity", find_spell( 1216178 ) )
-                      ->set_default_value_from_effect( 1 )
-                      ->set_chance( sets->has_set_bonus( MAGE_ARCANE, TWW2, B2 ) );
+  buffs.clarity = make_buff( this, "clarity", find_spell( 1216178 ) )
+                    ->set_default_value_from_effect( 1 )
+                    ->set_chance( sets->has_set_bonus( MAGE_ARCANE, TWW2, B2 ) );
 
   buffs.blessing_of_the_phoenix = make_buff( this, "blessing_of_the_phoenix", find_spell( 455134 ) )
                                     ->set_default_value_from_effect( 1 )
@@ -8729,10 +8741,9 @@ void mage_t::init_rng()
   // Accumulated RNG is also not present in the game data.
   accumulated_rng.pyromaniac = get_accumulated_rng( "pyromaniac", talents.pyromaniac.ok() ? 0.00605 : 0.0 );
 
-  // Reconstructed from the patch notes to give 2.5% and 2% avg proc chance.
   // TODO: get some actual data and confirm that they're still using accumulated RNG
   // and these values are accurate
-  double sft_step = specialization() == MAGE_FROST ? 9.6574e-4 : 6.2009e-4;
+  double sft_step = 6.2009e-4; // averages to 2% proc chance
   accumulated_rng.spellfrost_teachings = get_accumulated_rng( "spellfrost_teachings", talents.spellfrost_teachings.ok() ? sft_step : 0.0 );
 }
 
