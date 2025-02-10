@@ -4554,7 +4554,7 @@ using namespace helpers;
           p->proc_actions.channel_demonfire_tick_set->target = tar;
       }
     }
-    else if (p->specialization() == WARLOCK_AFFLICTION)
+    else if ( p->specialization() == WARLOCK_AFFLICTION )
     {
       if ( p->tier.fiendtracer_aff_2pc->ok() )
       {

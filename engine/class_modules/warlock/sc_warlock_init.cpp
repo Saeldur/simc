@@ -728,6 +728,32 @@ namespace warlock
                               ->set_duration( talents.grimoire_felguard->duration() );
   }
 
+  struct demonfire_flurry_buff_t : public buff_t
+  {
+    warlock_t* warlock;
+    demonfire_flurry_buff_t( warlock_t* p )
+      : buff_t( p, "demonfire_flurry", p->tier.fiendtracer_destro_demonfire_flurry ), warlock( p )
+    {
+      apply_affecting_aura( p->talents.demonfire_mastery );
+      apply_affecting_aura( p->talents.raging_demonfire );
+
+      if ( p->talents.raging_demonfire.enabled() )
+      {
+        base_buff_duration = ceil( base_buff_duration / buff_period ) * buff_period + 1_ms;
+      }
+
+      set_tick_callback(
+          [ this ]( buff_t*, int, timespan_t ) { warlock->proc_actions.channel_demonfire_tick_set->execute(); } );
+      set_tick_time_callback( []( const buff_t* b, unsigned int ) { return b->buff_period * b->dynamic_time_duration_multiplier; } );
+    }
+
+    void execute( int stacks, double value, timespan_t duration ) override
+    {
+      set_dynamic_time_duration_multiplier( warlock->cache.spell_cast_speed() );
+      buff_t::execute( stacks, value, duration );
+    }
+  };
+
   void warlock_t::create_buffs_destruction()
   {
     buffs.backdraft = make_buff( this, "backdraft", talents.backdraft_buff );
@@ -797,12 +823,8 @@ namespace warlock
                                ->set_pct_buff_type( stat_pct_buff_type::STAT_PCT_BUFF_HASTE )
                                ->set_default_value_from_effect( 1 );
 
-    buffs.demonfire_flurry = make_buff( this, "demonfire_flurry", tier.fiendtracer_destro_demonfire_flurry )
-                                 ->set_tick_callback( [ this ]( buff_t*, int, timespan_t ) {
-                                   proc_actions.channel_demonfire_tick_set->execute();
-                                 } )
-                                 ->apply_affecting_aura( talents.demonfire_mastery )
-                                 ->apply_affecting_aura( talents.raging_demonfire );
+
+    buffs.demonfire_flurry = make_buff<demonfire_flurry_buff_t>( this );
   }
 
   void warlock_t::create_buffs_diabolist()
