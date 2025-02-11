@@ -1274,7 +1274,11 @@ using namespace helpers;
 
           p()->resource_gain( RESOURCE_SOUL_SHARD, 0.1, p()->gains.wither );
 
-          if (p()->talents.demonfire_infusion.enabled() && rng().roll(p()->talents.demonfire_infusion->effectN(2).percent()))
+          // Note - Ingame this is very consistent so purely RNG is not the correct way to handle this, it is likely an
+          // accumulator. Used RNG for speed of testing since it should not actually affect results.
+          // This is using the Incinerate effect for chance, this was still bugged 11/02/2025. TODO: Check.
+          if ( p()->talents.demonfire_infusion.enabled() &&
+               rng().roll( p()->talents.demonfire_infusion->effectN( 2 ).percent() ) )
           {
             p()->proc_actions.channel_demonfire_tick->execute_on_target( d->target );
           }
@@ -1767,7 +1771,8 @@ using namespace helpers;
 
       if ( p()->tier.fiendtracer_aff_4pc->ok() && p()->buffs.aff_jackpot->check() )
       {
-        m *= 1 + p()->tier.fiendtracer_aff_4pc->effectN( 1 ).percent();
+        // It is an apply flat modifier with label to the buff.
+        m *= 1 + p()->tier.fiendtracer_aff_4pc->effectN( 3 ).percent();
       }
 
       return m;
@@ -1779,6 +1784,7 @@ using namespace helpers;
 
       if ( p()->tier.fiendtracer_aff_4pc->ok() && p()->buffs.aff_jackpot->check() )
       {
+        // It is an apply flat modifier with label to the buff.
         m *= 1 + p()->tier.fiendtracer_aff_4pc->effectN( 1 ).percent();
       }
 
